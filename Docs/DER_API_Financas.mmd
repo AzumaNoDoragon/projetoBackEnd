@@ -1,0 +1,47 @@
+erDiagram
+    USUARIOS ||--o{ CATEGORIAS : possui
+    USUARIOS ||--o{ FONTES_DESTINOS : possui
+    USUARIOS ||--o{ LANCAMENTOS : registra
+    CATEGORIAS ||--o{ LANCAMENTOS : classifica
+    FONTES_DESTINOS ||--o{ LANCAMENTOS : origem_destino
+
+    USUARIOS {
+        INT id PK
+        VARCHAR_120 nome
+        VARCHAR_160 email UK
+        CHAR_11 cpf UK
+        VARCHAR_100 senha_hash
+        DATETIME criado_em
+    }
+
+    CATEGORIAS {
+        INT id PK
+        INT usuario_id FK
+        VARCHAR_60 nome
+        ENUM_entrada_saida tipo
+    }
+
+    FONTES_DESTINOS {
+        INT id PK
+        INT usuario_id FK
+        VARCHAR_60 nome
+        ENUM_renda_conta_cartao_credito tipo
+        TINYINT dia_fechamento
+        TINYINT dia_vencimento
+        DECIMAL_12_2 limite
+    }
+
+    LANCAMENTOS {
+        INT id PK
+        INT usuario_id FK
+        ENUM_entrada_saida tipo
+        VARCHAR_120 descricao
+        DECIMAL_12_2 valor
+        DATE data
+        INT categoria_id FK
+        INT fonte_destino_id FK
+        TINYINT parcela_atual
+        TINYINT total_parcelas
+        CHAR_36 grupo_parcelamento
+        DATETIME criado_em
+    }

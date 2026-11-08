@@ -1,0 +1,88 @@
+sequenceDiagram
+    autonumber
+    actor Cliente
+    participant Express as Express / Routes
+    participant Auth as Auth Controller
+    participant Usuario as Model Usuario
+    participant DB as MySQL
+    participant Bcrypt
+    participant JWT
+
+    Note over Cliente,JWT: Cadastro de usuário — POST /auth/cadastro
+    Cliente->>Express: Envia nome, email, CPF e senha
+    Express->>Auth: Encaminha dados do cadastro
+    Auth->>Auth: Valida campos e formato do CPF
+    alt Dados inválidos
+        Auth-->>Express: Erros de validação
+        Express-->>Cliente: 400 Bad Request
+    else Dados válidos
+        Auth->>Usuario: Verifica existência de email/CPF
+        Usuario->>DB: SELECT por email ou CPF
+        DB-->>Usuario: Resultado da consulta
+        Usuario-->>Auth: Resultado
+        alt Email ou CPF já cadastrado
+            Auth-->>Express: Conflito de cadastro
+            Express-->>Cliente: 409 Conflict
+        else Usuário ainda não cadastrado
+            Auth->>Bcrypt: Gera hash da senha
+            Bcrypt-->>Auth: senha_hash
+            Auth->>DB: BEGIN TRANSACTION
+            Auth->>Usuario: Cria usuário
+            Usuario->>DB: INSERT INTO usuarios
+            DB-->>Usuario: id do usuário
+            Usuario-->>Auth: Usuário criado
+            Auth->>DB: INSERT categorias padrão
+            Auth->>DB: INSERT conta corrente padrão
+            alt Todas as operações concluídas
+                Auth->>DB: COMMIT
+                Auth-->>Express: Cadastro concluído
+                Express-->>Cliente: 201 Created
+            else Falha em alguma operação
+                Auth->>DB: ROLLBACK
+                Auth-->>Express: Erro no cadastro
+                Express-->>Cliente: Erro da operação
+            end
+        end
+    end
+
+    Note over Cliente,JWT: Autenticação — POST /auth/login
+    Cliente->>Express: Envia email e senha
+    Express->>Auth: Encaminha credenciais
+    Auth->>Usuario: Busca usuário pelo email
+    Usuario->>DB: SELECT usuario por email
+    DB-->>Usuario: Dados do usuário
+    Usuario-->>Auth: Usuário e senha_hash
+    alt Usuário não encontrado
+        Auth-->>Express: Credenciais inválidas
+        Express-->>Cliente: 401 Unauthorized
+    else Usuário encontrado
+        Auth->>Bcrypt: Compara senha informada e hash
+        Bcrypt-->>Auth: Resultado da comparação
+        alt Senha incorreta
+            Auth-->>Express: Credenciais inválidas
+            Express-->>Cliente: 401 Unauthorized
+        else Senha correta
+            Auth->>JWT: Assina token com ID do usuário
+            JWT-->>Auth: Token JWT
+            Note left of DB: Expiração: 1 hora
+            Auth-->>Express: Token e dados permitidos do usuário
+            Express-->>Cliente: 200 OK + token
+        end
+    end
+
+    Note over Cliente,JWT: Consulta do usuário autenticado — GET /auth/me
+    Cliente->>Express: GET /auth/me + Bearer Token
+    Express->>JWT: Valida assinatura e expiração
+    alt Token inválido ou expirado
+        JWT-->>Express: Falha na validação
+        Express-->>Cliente: 401 Unauthorized
+    else Token válido
+        JWT-->>Express: Claims do token
+        Express->>Auth: Disponibiliza req.auth.id
+        Auth->>Usuario: Busca usuário pelo ID autenticado
+        Usuario->>DB: SELECT por id
+        DB-->>Usuario: Dados do usuário
+        Usuario-->>Auth: Dados do usuário
+        Auth-->>Express: Dados do usuário autenticado
+        Express-->>Cliente: 200 OK + dados do usuário
+    end

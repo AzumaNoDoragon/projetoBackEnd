@@ -1,0 +1,41 @@
+sequenceDiagram
+    autonumber
+    actor Cliente
+    participant Express as Express / Routes
+    participant JWT as Middleware JWT
+    participant Route as Rota da API
+    participant Model as Model
+    participant DB as MySQL
+
+    Cliente->>Express: Requisição para rota protegida<br/>Authorization: Bearer token
+    Express->>JWT: Executa middleware de autenticação
+    JWT->>JWT: Verifica assinatura e expiração
+
+    alt Token ausente, inválido ou expirado
+        JWT-->>Express: Erro de autenticação
+        Express-->>Cliente: 401 Unauthorized
+    else Token válido
+        JWT-->>Express: Identidade autenticada
+        Note right of JWT: req.auth.id contém o ID<br/>obtido do token
+        Express->>Route: Encaminha requisição autenticada
+        Route->>Route: Valida parâmetros, query e body
+        alt Dados da requisição inválidos
+            Route-->>Express: Erros de validação
+            Express-->>Cliente: 400 Bad Request
+        else Dados válidos
+            Route->>Model: Chama operação com req.auth.id
+            Model->>DB: Executa SQL parametrizado
+            DB-->>Model: Resultado da consulta/operação
+            Model->>Model: Aplica regras de negócio e verifica propriedade
+            alt Registro inexistente ou pertence a outro usuário
+                Model-->>Route: Registro não acessível
+                Route-->>Express: Recurso não encontrado
+                Express-->>Cliente: 404 Not Found
+            else Operação permitida
+                Model-->>Route: Resultado
+                Route->>Route: Formata resposta
+                Route-->>Express: Dados e status HTTP
+                Express-->>Cliente: Resposta JSON
+            end
+        end
+    end

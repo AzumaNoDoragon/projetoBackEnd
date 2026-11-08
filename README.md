@@ -23,6 +23,10 @@ api-financas/
 │   ├── connection.js
 │   ├── schema.sql
 │   └── seed.sql
+├── Docs/
+│   ├── api_authentication_flow
+│   ├── Sequencia_Cadastro_Auth
+│   └── Sequencia_Rotas_Protegidas
 ├── middleware/
 │   └── auth.js
 ├── models/
@@ -53,6 +57,46 @@ api-financas/
 ## Divisão de responsabilidades
 
 O desenvolvimento será realizado por três integrantes, utilizando divisão por domínio. Cada integrante será responsável pelo desenvolvimento completo de suas funcionalidades, incluindo banco de dados, models, consultas SQL, rotas e validações.
+
+## Diagramas do Projeto
+
+Esta seção apresenta os diagramas utilizados para documentar a estrutura do banco de dados e o fluxo de funcionamento da API.
+
+<details><summary><b>Clique aqui para expandir a seção</b></summary>
+
+### Diagrama Entidade-Relacionamento (DER)
+
+Representa as entidades do sistema, seus atributos, chaves primárias, chaves estrangeiras e relacionamentos entre as tabelas.
+
+<details><summary><b>Clique aqui para expandir a imagem</b></summary>
+
+![DER_API_Financas.svg](./Docs/DER_API_Financas.svg)
+
+</details>
+
+### Diagramas de Sequência
+
+#### Cadastro e Autenticação
+
+Representa o fluxo de cadastro de usuários, incluindo validações, criptografia de senha e criação dos registros iniciais, além do processo de autenticação e geração do token JWT.
+
+<details><summary><b>Clique aqui para expandir a imagem</b></summary>
+
+![Sequencia_Cadastro_Auth.svg](./Docs/Sequencia_Cadastro_Auth.svg)
+
+</details>
+
+#### Rotas Protegidas
+
+Representa o fluxo de acesso às rotas protegidas da API, desde o envio do token JWT até a validação da autenticação, identificação do usuário e execução das operações nos modelos e no banco de dados.
+
+<details><summary><b>Clique aqui para expandir a imagem</b></summary>
+
+![Sequencia_Rotas_Protegidas.svg](./Docs/Sequencia_Rotas_Protegidas.svg)
+
+</details>
+
+</details>
 
 ### Integrante A — Usuários, autenticação e categorias
 
