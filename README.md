@@ -1,6 +1,8 @@
 # API de Controle Financeiro
 
-API REST para gerenciamento de finanças pessoais, desenvolvida como projeto avaliativo da disciplina **Desenvolvimento Web Avançado**.
+API REST para gerenciamento de finanças pessoais, desenvolvida como projeto avaliativo da disciplina **Programação Web Back-end**.
+
+Aqui está o [link](https://costasilvati.github.io/IntroNodeJS/projeto-api-financas.html) da página de instruções feita pela professora.
 
 O sistema permite cadastrar usuários, gerenciar categorias, fontes e destinos financeiros, registrar movimentações e gerar relatórios financeiros.
 
@@ -98,7 +100,7 @@ Representa o fluxo de acesso às rotas protegidas da API, desde o envio do token
 
 </details>
 
-### Integrante A — Usuários, autenticação e categorias
+### - [Thiago Dutra da Silva](https://github.com/SimonR556) — Usuários, autenticação e categorias
 
 - Cadastro e autenticação de usuários.
 - Hash de senhas com bcrypt.
@@ -108,14 +110,14 @@ Representa o fluxo de acesso às rotas protegidas da API, desde o envio do token
 - Relatório por categoria.
 - Validação de CPF.
 
-### Integrante B — Fontes e destinos
+### - [João Levi Cabral Piotto](https://github.com/joaolevicabralpiotto) — Fontes e destinos
 
 - Modelagem e gerenciamento de fontes e destinos.
 - CRUD de fontes e destinos.
 - Validações de contas, rendas e cartões de crédito.
 - Relatório por fonte/destino.
 
-### Integrante C — Lançamentos e faturas
+### - [Gabriel Santos Afini da Silva](https://github.com/AzumaNoDoragon) — Lançamentos e faturas
 
 - Modelagem e gerenciamento de lançamentos.
 - CRUD de lançamentos.
@@ -154,12 +156,12 @@ Copie `.env.example` para `.env` e configure as credenciais do MySQL e a chave s
 
 ### 4. Criar o banco de dados
 
-Execute os scripts:
+Execute o comando:
 
 ```text
-database/schema.sql
-database/seed.sql
+npm run db:init
 ```
+Este comando cria as tabelas, caso elas não existam
 
 ### 5. Iniciar a aplicação
 
@@ -195,6 +197,89 @@ As atividades serão acompanhadas por meio do GitHub Issues e GitHub Projects.
 - Utilizar `req.auth.id` para identificar o usuário autenticado.
 - Garantir que cada usuário tenha acesso somente aos próprios dados.
 - Não versionar o arquivo `.env`.
+
+## Padrão de Commits
+
+Para manter o histórico do projeto organizado e facilitar a identificação das alterações realizadas por cada integrante, será utilizado um padrão de mensagens baseado no **Conventional Commits**.
+
+As mensagens devem ser objetivas, descrever a alteração realizada e, sempre que possível, referenciar a Issue correspondente no GitHub.
+
+### 1. Tipos de commit
+
+| Tipo | Descrição | Quando utilizar |
+|---|---|---|
+| `Feat` | Nova funcionalidade. | Implementação de uma rota, endpoint, autenticação ou funcionalidade da API. |
+| `Fix` | Correção de erros ou comportamentos inesperados. | Correção de validações, consultas SQL, cálculos ou regras de negócio. |
+| `Docs` | Alterações na documentação. | Atualização do README, comentários explicativos ou documentação de endpoints. |
+| `Chore` | Tarefas de manutenção e configuração. | Configuração do ambiente, dependências, scripts, `.gitignore` ou organização de diretórios. |
+| `Refact` | Reestruturação do código sem alterar seu comportamento. | Melhorias na organização de funções, classes, modelos ou rotas. |
+| `Test` | Criação ou alteração de testes. | Testes de endpoints, validações, autenticação e regras de negócio. |
+| `Style` | Alterações de formatação sem modificar a lógica. | Ajustes de indentação, espaçamento e padronização visual do código. |
+
+### 2. Formato da mensagem
+
+Utilize o seguinte formato:
+
+```text
+Tipo: descrição breve da alteração (#ID)
+```
+
+Exemplos:
+
+```text
+Feat: implementa cadastro de lançamentos (#3)
+Fix: corrige validação do valor das parcelas (#4)
+Docs: documenta os endpoints de autenticação (#8)
+Chore: configura conexão com o banco de dados (#6)
+Refact: centraliza validações de categorias (#9)
+Test: adiciona testes para criação de lançamentos (#3)
+```
+
+**Orientações:**
+- Utilize um dos tipos definidos na tabela.
+- Escreva a descrição em português, de forma breve e objetiva.
+- Prefira verbos no presente, como `implementa`, `corrige`, `adiciona` e `configura`.
+- Referencie a Issue relacionada utilizando `(#ID)`.
+- Evite mensagens genéricas como `alterações`, `atualizações`, `ajustes` ou `commit inicial`.
+
+### 3. Como associar um commit a uma Issue
+
+Para relacionar um commit a uma Issue sem fechá-la automaticamente, basta incluir sua referência na mensagem:
+
+```text
+Feat: implementa CRUD de lançamentos (#3)
+```
+
+Dessa forma, o commit fica associado à Issue, permitindo acompanhar o desenvolvimento sem encerrá-la.
+
+### 4. Como fechar uma Issue automaticamente
+
+Quando todas as tarefas e critérios de aceitação de uma Issue estiverem concluídos, utilize uma das palavras-chave reconhecidas pelo GitHub:
+
+- `Closes #ID`
+- `Fixes #ID`
+- `Resolves #ID`
+
+Exemplo:
+
+```text
+Feat: implementa CRUD completo de lançamentos (Closes #3)
+```
+
+Ao enviar esse commit para a branch padrão do repositório (por exemplo, `main`), o GitHub fechará automaticamente a Issue referenciada.
+
+**Atenção:** a palavra-chave de fechamento deve ser utilizada somente quando a Issue estiver realmente concluída. Se ainda houver tarefas pendentes, utilize apenas `(#ID)` e não esqueça de marcar o checklista das issues.
+
+### 5. Exemplos de utilização
+
+| Situação | Mensagem |
+|---|---|
+| Início de uma funcionalidade | `Feat: inicia implementação de lançamentos (#3)` |
+| Correção durante o desenvolvimento | `Fix: corrige cálculo do valor das parcelas (#4)` |
+| Atualização da documentação | `Docs: atualiza instruções de instalação (#6)` |
+| Conclusão de uma Issue | `Feat: finaliza CRUD de categorias (Closes #9)` |
+
+**Regra geral:** cada commit deve representar uma alteração lógica e coerente. Não é necessário esperar a conclusão de uma Issue para realizar commits; o importante é manter o histórico atualizado e utilizar a referência adequada para acompanhar o progresso.
 
 ## Escopo do projeto
 
