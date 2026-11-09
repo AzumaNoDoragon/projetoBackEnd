@@ -1,0 +1,35 @@
+{
+  "name": "projetobackend",
+  "version": "1.0.0",
+  "description": "API REST para gerenciamento de finanças pessoais, desenvolvida como projeto avaliativo da disciplina **Desenvolvimento Web Avançado**.",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node ${main}",
+    "dev": "nodemon ${main}",
+    "db:init": "node database/init.js",
+    "db:seed": "node database/seed.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AzumaNoDoragon/projetoBackEnd.git"
+  },
+  "keywords": [],
+  "author": "Gabriel Santos Afini da Silva, Thiago Dutra da Silva e João Levi Cabral Piotto",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/AzumaNoDoragon/projetoBackEnd/issues"
+  },
+  "homepage": "https://github.com/AzumaNoDoragon/projetoBackEnd#readme",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "dotenv": "^18.0.10",
+    "express": "^5.3.0",
+    "express-jwt": "^8.5.1",
+    "jsonwebtoken": "^9.0.3",
+    "mysql2": "^3.24.6"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}
