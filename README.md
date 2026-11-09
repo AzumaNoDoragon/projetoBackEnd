@@ -1,6 +1,8 @@
 # API de Controle Financeiro
 
-API REST para gerenciamento de finanças pessoais, desenvolvida como projeto avaliativo da disciplina **Desenvolvimento Web Avançado**.
+API REST para gerenciamento de finanças pessoais, desenvolvida como projeto avaliativo da disciplina **Programação Web Back-end**.
+
+Aqui está o [link](https://costasilvati.github.io/IntroNodeJS/projeto-api-financas.html) da página de instruções feita pela professora.
 
 O sistema permite cadastrar usuários, gerenciar categorias, fontes e destinos financeiros, registrar movimentações e gerar relatórios financeiros.
 
