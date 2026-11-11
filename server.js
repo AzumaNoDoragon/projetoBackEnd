@@ -2,9 +2,9 @@ const express = require('express')
 
 const server = express()
 
-server.use(express.json)
+server.use(express.json())
 
-server.use(express.json)
+server.use('/lancamentos', require('./routes/lancamentos'))
 
 server.use((req, res) => { res.status(404).json({ erro: "Rota não encontrada." }) })
 
