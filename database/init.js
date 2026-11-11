@@ -1,62 +1,35 @@
-const conectar = require('./connection');
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const mysql = require('mysql2/promise');
 
-const sql = `
-    CREATE DATABASE IF NOT EXISTS financas;
+require('dotenv').config();
 
-    USE financas;
-
-    CREATE TABLE IF NOT EXISTS usuarios (
-        id INT AUTO_INCREMENT PRIMARY KEY
-    );
-
-    CREATE TABLE IF NOT EXISTS categorias (
-        id INT AUTO_INCREMENT PRIMARY KEY
-    );
-
-    CREATE TABLE IF NOT EXISTS fontes_destinos (
-        id INT AUTO_INCREMENT PRIMARY KEY
-    );
-
-    CREATE TABLE IF NOT EXISTS lancamentos(
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        usuario_id INT NOT NULL,
-        tipo ENUM('entrada', 'saida') NOT NULL,
-        descricao VARCHAR(120) NOT NULL,
-        valor DECIMAL(12,2) NOT NULL,
-        data DATE NOT NULL,
-        categoria_id INT NOT NULL,
-        fonte_destino_id INT NOT NULL,
-        parcela_atual TINYINT DEFAULT 1,
-        total_parcelas TINYINT DEFAULT 1,
-        grupo_parcelamento CHAR(36) NULL,
-        criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
-
-        CONSTRAINT chk_lancamento_valor CHECK (valor > 0),
-
-        CONSTRAINT chk_total_parcelas CHECK (total_parcelas BETWEEN 1 AND 48),
-
-        CONSTRAINT chk_parcela_atual CHECK (parcela_atual BETWEEN 1 AND total_parcelas),
-
-        INDEX idx_lancamento_usuario_data (usuario_id, data),
-
-        FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
-        FOREIGN KEY (categoria_id) REFERENCES categorias(id),
-        FOREIGN KEY (fonte_destino_id) REFERENCES fontes_destinos(id)
-    );
-`
-
-conectar((erro, connection) => {
-    if (erro) {
-        console.error('Não foi possível inicializar o banco.');
+async function inicializar() {
+    if (!process.env.DB_NAME || !process.env.DB_NAME.trim()) {
+        console.error('Defina DB_NAME com o nome de um banco existente.');
+        process.exitCode = 1;
         return;
     }
 
-    connection.query(sql, (erro) => {
-        if (erro) {
-            console.error("Erro ao inicializar: ", erro);
-        } else {
-            console.log("Banco criado com sucesso!");
-        }
-        connection.end();
-    })
-}, undefined)
+    const sql = await fs.readFile(path.join(__dirname, 'schema.sql'), 'utf8');
+    const connection = await mysql.createConnection({
+        host: process.env.DB_HOST,
+        port: process.env.DB_PORT || 3306,
+        user: process.env.DB_USER,
+        password: process.env.DB_PASSWORD,
+        database: process.env.DB_NAME,
+        multipleStatements: true
+    });
+
+    try {
+        await connection.query(sql);
+        console.log('Inicialização das tabelas concluída com sucesso!');
+    } finally {
+        await connection.end();
+    }
+}
+
+inicializar().catch((erro) => {
+    console.error('Não foi possível inicializar as tabelas:', erro.code || 'falha na inicialização');
+    process.exitCode = 1;
+});
