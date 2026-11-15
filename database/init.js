@@ -3,21 +3,19 @@ const conectar = require('./connection');
 const sql = `
     CREATE DATABASE IF NOT EXISTS financas;
 
-    USE financas;
-
-    CREATE TABLE IF NOT EXISTS usuarios (
+    CREATE TABLE IF NOT EXISTS financas.usuarios (
         id INT AUTO_INCREMENT PRIMARY KEY
     );
 
-    CREATE TABLE IF NOT EXISTS categorias (
+    CREATE TABLE IF NOT EXISTS financas.categorias (
         id INT AUTO_INCREMENT PRIMARY KEY
     );
 
-    CREATE TABLE IF NOT EXISTS fontes_destinos (
+    CREATE TABLE IF NOT EXISTS financas.fontes_destinos (
         id INT AUTO_INCREMENT PRIMARY KEY
     );
 
-    CREATE TABLE IF NOT EXISTS lancamentos(
+    CREATE TABLE IF NOT EXISTS financas.lancamentos(
         id INT AUTO_INCREMENT PRIMARY KEY,
         usuario_id INT NOT NULL,
         tipo ENUM('entrada', 'saida') NOT NULL,
@@ -59,4 +57,4 @@ conectar((erro, connection) => {
         }
         connection.end();
     })
-}, undefined)
+}, null)
