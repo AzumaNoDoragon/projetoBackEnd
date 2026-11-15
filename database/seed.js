@@ -11,6 +11,7 @@ const sql = `
     VALUES (1), (2);
 
     INSERT IGNORE INTO financas.lancamentos (
+        id,
         usuario_id,
         tipo,
         descricao,
@@ -22,11 +23,11 @@ const sql = `
         total_parcelas,
         grupo_parcelamento
     ) VALUES
-    (1, 'entrada', 'Salário mensal', 3500.00, '2026-11-05', 1, 1, 1, 1, NULL),
-    (1, 'saida', 'Supermercado', 450.75, '2026-11-06', 1, 1, 1, 1, NULL),
-    (1, 'saida', 'Conta de energia', 180.50, '2026-11-08', 1, 1, 1, 1, NULL),
-    (1, 'saida', 'Notebook', 2400.00, '2026-11-10', 2, 1, 1, 12, '550e8400-e29b-41d4-a716-446655440000'),
-    (1, 'entrada', 'Freelance', 800.00, '2026-11-12', 2, 1, 1, 1, NULL);
+    (1, 1, 'entrada', 'Salário mensal', 3500.00, '2026-11-05', 1, 1, 1, 1, NULL),
+    (2, 1, 'saida', 'Supermercado', 450.75, '2026-11-06', 1, 1, 1, 1, NULL),
+    (3, 1, 'saida', 'Conta de energia', 180.50, '2026-11-08', 1, 1, 1, 1, NULL),
+    (4, 1, 'saida', 'Notebook', 2400.00, '2026-11-10', 2, 1, 1, 12, '550e8400-e29b-41d4-a716-446655440000'),
+    (5, 1, 'entrada', 'Freelance', 800.00, '2026-11-12', 2, 1, 1, 1, NULL);
 `
 
 conectar((erro, connection) => {
