@@ -1,4 +1,7 @@
-CREATE TABLE IF NOT EXISTS usuarios (
+CREATE DATABASE IF NOT EXISTS api_financas;
+USE api_financas;
+
+CREATE TABLE usuarios (
     id          INT AUTO_INCREMENT PRIMARY KEY,
     nome        VARCHAR(120) NOT NULL,
     email       VARCHAR(160) NOT NULL,
@@ -9,7 +12,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
     CONSTRAINT uq_usuarios_cpf   UNIQUE (cpf)
 );
 
-CREATE TABLE IF NOT EXISTS categorias (
+CREATE TABLE categorias (
     id          INT AUTO_INCREMENT PRIMARY KEY,
     usuario_id  INT NOT NULL,
     nome        VARCHAR(60) NOT NULL,
@@ -18,7 +21,7 @@ CREATE TABLE IF NOT EXISTS categorias (
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS fontes_destinos (
+CREATE TABLE fontes_destinos (
     id              INT AUTO_INCREMENT PRIMARY KEY,
     usuario_id      INT NOT NULL,
     nome            VARCHAR(60) NOT NULL,
@@ -38,7 +41,7 @@ CREATE TABLE IF NOT EXISTS fontes_destinos (
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS lancamentos (
+CREATE TABLE lancamentos (
     id                  INT AUTO_INCREMENT PRIMARY KEY,
     usuario_id          INT NOT NULL,
     tipo                ENUM('entrada', 'saida') NOT NULL,
