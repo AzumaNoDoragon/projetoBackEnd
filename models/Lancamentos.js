@@ -213,35 +213,104 @@ class Lancamentos {
             if (erro) {
                 return callback(erro);
             }
-            
-            const sql = `
-                UPDATE financas.lancamentos
-                SET
-                    tipo = ?,
-                    descricao = ?,
-                    valor = ?,
-                    data = ?,
-                    categoria_id = ?,
-                    fonte_destino_id = ?
+
+            const sqlCategoria = `
+                SELECT id, tipo
+                FROM financas.categorias
                 WHERE id = ? AND usuario_id = ?
             `;
 
-            const valores = [
-                dados.tipo,
-                dados.descricao,
-                dados.valor,
-                dados.data,
-                dados.categoria_id,
-                dados.fonte_destino_id,
-                id,
-                usuarioId
-            ];
-            
-            connection.query(sql, valores, (erro, resultado) => {
-                connection.end();
-                callback(erro, resultado)
-            });
-        })
+            connection.query(
+                sqlCategoria,
+                [dados.categoria_id, usuarioId],
+                (erro, categorias) => {
+                    if (erro) {
+                        connection.end();
+                        return callback(erro);
+                    }
+
+                    if (categorias.length === 0) {
+                        connection.end();
+
+                        const erro = new Error('Categoria não encontrada');
+                        erro.statusCode = 404;
+
+                        return callback(erro);
+                    }
+
+                    if (categorias[0].tipo !== dados.tipo) {
+                        connection.end();
+
+                        const erro = new Error(
+                            'A categoria não corresponde ao tipo do lançamento'
+                        );
+                        erro.statusCode = 400;
+
+                        return callback(erro);
+                    }
+
+                    const sqlFonteDestino = `
+                        SELECT id
+                        FROM financas.fontes_destinos
+                        WHERE id = ? AND usuario_id = ?
+                    `;
+
+                    connection.query(
+                        sqlFonteDestino,
+                        [dados.fonte_destino_id, usuarioId],
+                        (erro, fontesDestinos) => {
+                            if (erro) {
+                                connection.end();
+                                return callback(erro);
+                            }
+
+                            if (fontesDestinos.length === 0) {
+                                connection.end();
+
+                                const erro = new Error(
+                                    'Fonte/destino não encontrada'
+                                );
+                                erro.statusCode = 404;
+
+                                return callback(erro);
+                            }
+
+                            const sqlUpdate = `
+                                UPDATE financas.lancamentos
+                                SET
+                                    tipo = ?,
+                                    descricao = ?,
+                                    valor = ?,
+                                    data = ?,
+                                    categoria_id = ?,
+                                    fonte_destino_id = ?
+                                WHERE id = ? AND usuario_id = ?
+                            `;
+
+                            const valores = [
+                                dados.tipo,
+                                dados.descricao,
+                                dados.valor,
+                                dados.data,
+                                dados.categoria_id,
+                                dados.fonte_destino_id,
+                                id,
+                                usuarioId
+                            ];
+
+                            connection.query(
+                                sqlUpdate,
+                                valores,
+                                (erro, resultado) => {
+                                    connection.end();
+                                    callback(erro, resultado);
+                                }
+                            );
+                        }
+                    );
+                }
+            );
+        });
     }
 
     delete(id, usuarioId, callback) {

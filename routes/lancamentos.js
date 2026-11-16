@@ -43,6 +43,7 @@ routes.post('/', autenticacao, (req, res) => {
 
 routes.put('/:id', autenticacao, (req, res) => {
     const id = Number(req.params.id);
+    const dados = req.body;
 
     if (!Number.isInteger(id) || id <= 0) {
         return res.status(400).json({
@@ -50,22 +51,106 @@ routes.put('/:id', autenticacao, (req, res) => {
         });
     }
 
-    Lancamentos.update(id, req.auth.id, req.body, (erro, resultados) => {
+    const camposObrigatorios = [
+        'tipo',
+        'descricao',
+        'valor',
+        'data',
+        'categoria_id',
+        'fonte_destino_id'
+    ];
+
+    for (const campo of camposObrigatorios) {
+        if (
+            dados[campo] === undefined ||
+            dados[campo] === null ||
+            dados[campo] === ''
+        ) {
+            return res.status(400).json({
+                erro: `O campo ${campo} é obrigatório`
+            });
+        }
+    }
+
+    if (!['entrada', 'saida'].includes(dados.tipo)) {
+        return res.status(400).json({
+            erro: 'Tipo deve ser entrada ou saida'
+        });
+    }
+
+    if (typeof dados.descricao !== 'string' || !dados.descricao.trim()) {
+        return res.status(400).json({
+            erro: 'Descrição inválida'
+        });
+    }
+
+    const valor = Number(dados.valor);
+
+    if (!Number.isFinite(valor) || valor <= 0) {
+        return res.status(400).json({
+            erro: 'Valor deve ser um número maior que zero'
+        });
+    }
+
+    const dataValida = /^\d{4}-\d{2}-\d{2}$/.test(dados.data);
+    const dataConvertida = new Date(`${dados.data}T00:00:00Z`);
+
+    if (
+        !dataValida ||
+        Number.isNaN(dataConvertida.getTime()) ||
+        dataConvertida.toISOString().slice(0, 10) !== dados.data
+    ) {
+        return res.status(400).json({
+            erro: 'Data inválida. Utilize o formato AAAA-MM-DD'
+        });
+    }
+
+    if (
+        !Number.isInteger(Number(dados.categoria_id)) ||
+        Number(dados.categoria_id) <= 0 ||
+        !Number.isInteger(Number(dados.fonte_destino_id)) ||
+        Number(dados.fonte_destino_id) <= 0
+    ) {
+        return res.status(400).json({
+            erro: 'Categoria ou fonte/destino inválido'
+        });
+    }
+
+    Lancamentos.findById(id, req.auth.id, (erro, resultado) => {
         if (erro) {
             return res.status(500).json({
                 erro: erro.message
             });
         }
 
-        if (resultados.affectedRows === 0) {
+        if (resultado.length === 0) {
             return res.status(404).json({
                 erro: 'Lançamento não encontrado'
             });
         }
 
-        return res.status(200).json({
-            mensagem: 'Lançamento atualizado com sucesso'
-        });
+        Lancamentos.update(
+            id,
+            req.auth.id,
+            {
+                ...dados,
+                descricao: dados.descricao.trim(),
+                valor,
+                categoria_id: Number(dados.categoria_id),
+                fonte_destino_id: Number(dados.fonte_destino_id)
+            },
+            (erro, resultado) => {
+                if (erro) {
+                    return res.status(erro.statusCode || 500).json({
+                        erro: erro.message
+                    });
+                }
+
+                return res.status(200).json({
+                    mensagem: 'Lançamento atualizado com sucesso'
+                });
+            }
+        );
     });
 });
 
