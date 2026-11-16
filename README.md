@@ -163,7 +163,16 @@ npm run db:init
 ```
 Este comando cria as tabelas, caso elas não existam
 
-### 5. Iniciar a aplicação
+### 5. Alimentar o banco de dados
+
+Execute o comando:
+
+```text
+npm run db:seed
+```
+Este comando insere dados para teste no banco de dados
+
+### 6. Iniciar a aplicação
 
 Desenvolvimento:
 
