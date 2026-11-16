@@ -33,7 +33,163 @@ class Lancamentos {
         }) 
     }
 
-    read(id, usuarioId, callback) {
+    read(filtro, usuarioId, callback) {
+        conectar((erro, connection) => {
+            if (erro) {
+                return callback(erro);
+            }
+
+            const pagina = Number(filtro.pagina || 1);
+
+            if (!Number.isInteger(pagina) || pagina < 1) {
+                connection.end();
+                return callback(new Error('Página inválida'));
+            }
+
+            if (filtro.tipo && !['entrada', 'saida'].includes(filtro.tipo)) {
+                connection.end();
+                return callback(new Error('Tipo inválido'));
+            }
+
+            for (const campo of ['categoriaId', 'fonteDestinoId']) {
+                if (filtro[campo] !== undefined) {
+                    const id = Number(filtro[campo]);
+
+                    if (!Number.isInteger(id) || id <= 0) {
+                        connection.end();
+                        return callback(new Error(`${campo} inválido`));
+                    }
+                }
+            }
+
+            const hoje = new Date();
+
+            const primeiroDia = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-01`;
+
+            const ultimoDia = new Date(
+                hoje.getFullYear(),
+                hoje.getMonth() + 1,
+                0
+            ).getDate();
+
+            const ultimoDiaMes = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
+
+            const inicio = filtro.inicio || primeiroDia;
+            const fim = filtro.fim || ultimoDiaMes;
+
+            // Validação das datas
+            const dataValida = (data) => {
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) {
+                    return false;
+                }
+
+                const [ano, mes, dia] = data.split('-').map(Number);
+
+                const dataConvertida = new Date(Date.UTC(ano, mes - 1, dia));
+
+                return dataConvertida.getUTCFullYear() === ano &&
+                    dataConvertida.getUTCMonth() === mes - 1 &&
+                    dataConvertida.getUTCDate() === dia;
+            };
+
+            if (!dataValida(inicio) || !dataValida(fim) || inicio > fim) {
+                connection.end();
+                return callback(new Error('Período inválido'));
+            }
+
+            let sql = `
+                SELECT *
+                FROM financas.lancamentos
+                WHERE usuario_id = ?
+                AND data BETWEEN ? AND ?
+            `;
+
+            const valores = [usuarioId, inicio, fim];
+
+            if (filtro.tipo) {
+                sql += ' AND tipo = ?';
+                valores.push(filtro.tipo);
+            }
+
+            if (filtro.categoriaId) {
+                sql += ' AND categoria_id = ?';
+                valores.push(Number(filtro.categoriaId));
+            }
+
+            if (filtro.fonteDestinoId) {
+                sql += ' AND fonte_destino_id = ?';
+                valores.push(Number(filtro.fonteDestinoId));
+            }
+
+            sql += ' ORDER BY data DESC, id DESC LIMIT ? OFFSET ?';
+
+            const limite = ITENS_POR_PAGINA;
+            const deslocamento = (pagina - 1) * limite;
+
+            const valoresPaginacao = [...valores, limite, deslocamento];
+
+            connection.query(sql, valoresPaginacao, (erro, resultados) => {
+                if (erro) {
+                    connection.end();
+                    return callback(erro);
+                }
+
+                const sqlResumo = `
+                    SELECT
+                        COUNT(*) AS totalRegistros,
+                        COALESCE(SUM(CASE
+                            WHEN tipo = 'entrada' THEN valor
+                            ELSE 0
+                        END), 0) AS entradas,
+
+                        COALESCE(SUM(CASE
+                            WHEN tipo = 'saida' THEN valor
+                            ELSE 0
+                        END), 0) AS saidas
+
+                    FROM financas.lancamentos
+                    WHERE usuario_id = ?
+                    AND data BETWEEN ? AND ?
+                    ${filtro.tipo ? 'AND tipo = ?' : ''}
+                    ${filtro.categoriaId ? 'AND categoria_id = ?' : ''}
+                    ${filtro.fonteDestinoId ? 'AND fonte_destino_id = ?' : ''}
+                `;
+
+                connection.query(sqlResumo, valores, (erro, resumo) => {
+                    connection.end();
+
+                    if (erro) {
+                        return callback(erro);
+                    }
+
+                    const entradas = Number(resumo[0].entradas);
+                    const saidas = Number(resumo[0].saidas);
+                    const totalRegistros = Number(resumo[0].totalRegistros);
+
+                    const totalPaginas = Math.ceil(
+                        totalRegistros / ITENS_POR_PAGINA
+                    );
+
+                    callback(null, {
+                        periodo: {
+                            inicio,
+                            fim
+                        },
+                        resumo: {
+                            entradas,
+                            saidas,
+                            saldo: entradas - saidas
+                        },
+                        pagina,
+                        totalPaginas,
+                        itens: resultados
+                    });
+                });
+            });
+        });
+    }
+
+    findById(id, usuarioId, callback) {
         conectar((erro, connection) => {
             if (erro) {
                 return callback(erro);
@@ -47,7 +203,7 @@ class Lancamentos {
             
             connection.query(sql, [id, usuarioId], (erro, resultado) => {
                 connection.end();
-                callback(erro, resultado)
+                callback(erro, resultado[0])
             });
         })
     }
