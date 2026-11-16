@@ -313,21 +313,52 @@ class Lancamentos {
         });
     }
 
-    delete(id, usuarioId, callback) {
-        conectar((erro, connection) => {
+    delete(id, usuarioId, todasParcelas, callback) {
+        this.findById(id, usuarioId, (erro, resultado) => {
             if (erro) {
                 return callback(erro);
             }
-            const sql = `
-                DELETE FROM financas.lancamentos
-                WHERE id = ? AND usuario_id = ?
-            `;
-            
-            connection.query(sql, [id, usuarioId], (erro, resultado) => {
-                connection.end();
-                callback(erro, resultado)
+
+            if (resultado.length === 0) {
+                return callback(null, null);
+            }
+
+            const lancamento = resultado[0];
+
+            conectar((erro, connection) => {
+                if (erro) {
+                    return callback(erro);
+                }
+
+                let sql;
+                let valores;
+
+                if (todasParcelas && lancamento.grupo_parcelamento) {
+                    sql = `
+                        DELETE FROM financas.lancamentos
+                        WHERE grupo_parcelamento = ?
+                        AND usuario_id = ?
+                    `;
+
+                    valores = [
+                        lancamento.grupo_parcelamento,
+                        usuarioId
+                    ];
+                } else {
+                    sql = `
+                        DELETE FROM financas.lancamentos
+                        WHERE id = ? AND usuario_id = ?
+                    `;
+
+                    valores = [id, usuarioId];
+                }
+
+                connection.query(sql, valores, (erro, resultados) => {
+                    connection.end();
+                    callback(erro, resultados);
+                });
             });
-        })
+        });
     }
 }
 

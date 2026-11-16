@@ -155,7 +155,7 @@ routes.put('/:id', autenticacao, (req, res) => {
 });
 
 routes.delete('/:id', autenticacao, (req, res) => {
-    const id = Number(req.params.id)
+    const id = Number(req.params.id);
 
     if (!Number.isInteger(id) || id <= 0) {
         return res.status(400).json({
@@ -163,19 +163,33 @@ routes.delete('/:id', autenticacao, (req, res) => {
         });
     }
 
-    Lancamentos.delete(id, req.auth.id, (erro, resultados) => {
-        if (erro) {
-            return res.status(500).json({ erro: erro.message })
-        }
-        if (resultados.affectedRows === 0) {
-            return res.status(404).json({
-                erro: 'Lançamento não encontrado'
+    const todasParcelas = req.query.todasParcelas === 'true';
+
+    Lancamentos.delete(
+        id,
+        req.auth.id,
+        todasParcelas,
+        (erro, resultados) => {
+            if (erro) {
+                return res.status(500).json({
+                    erro: erro.message
+                });
+            }
+
+            if (resultados === null || resultados.affectedRows === 0) {
+                return res.status(404).json({
+                    erro: 'Lançamento não encontrado'
+                });
+            }
+
+            return res.status(200).json({
+                mensagem: todasParcelas
+                    ? 'Lançamentos excluídos com sucesso'
+                    : 'Lançamento excluído com sucesso',
+                excluidos: resultados.affectedRows
             });
         }
-        return res.status(200).json({
-            mensagem: 'Lançamento excluído com sucesso'
-        })
-    })
-})
+    );
+});
 
 module.exports = routes;
