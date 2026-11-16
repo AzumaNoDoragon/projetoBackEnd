@@ -34,12 +34,103 @@ routes.get('/:id', autenticacao, (req, res) => {
 })
 
 routes.post('/', autenticacao, (req, res) => {
-    console.log('Rota POST /');
-    Lancamentos.create()
-    const mensagem = Lancamentos.teste();
+    const {
+        tipo,
+        descricao,
+        valor,
+        data,
+        categoria_id,
+        fonte_destino_id,
+        parcelas = 1
+    } = req.body;
 
-    res.status(200).send(mensagem)
-})
+    if (
+        !tipo ||
+        !descricao ||
+        valor === undefined ||
+        !data ||
+        !categoria_id ||
+        !fonte_destino_id
+    ) {
+        return res.status(400).json({
+            erro: 'Todos os campos obrigatórios devem ser preenchidos'
+        });
+    }
+
+    if (!['entrada', 'saida'].includes(tipo)) {
+        return res.status(400).json({
+            erro: 'Tipo deve ser entrada ou saida'
+        });
+    }
+
+    if (typeof descricao !== 'string' || descricao.trim() === '') {
+        return res.status(400).json({
+            erro: 'Descrição inválida'
+        });
+    }
+
+    if (
+        !Number.isFinite(Number(valor)) ||
+        Number(valor) <= 0
+    ) {
+        return res.status(400).json({
+            erro: 'O valor deve ser um número maior que zero'
+        });
+    }
+
+    const dataValida = /^\d{4}-\d{2}-\d{2}$/.test(data) &&
+        !Number.isNaN(Date.parse(data)) &&
+        new Date(data + 'T00:00:00.000Z').toISOString().slice(0, 10) === data;
+
+    if (!dataValida) {
+        return res.status(400).json({
+            erro: 'Data inválida. Utilize o formato AAAA-MM-DD'
+        });
+    }
+
+    if (
+        !Number.isInteger(Number(parcelas)) ||
+        Number(parcelas) < 1 ||
+        Number(parcelas) > 48
+    ) {
+        return res.status(400).json({
+            erro: 'A quantidade de parcelas deve estar entre 1 e 48'
+        });
+    }
+
+    const dados = {
+        tipo,
+        descricao: descricao.trim(),
+        valor: Number(valor),
+        data,
+        categoria_id,
+        fonte_destino_id
+    };
+
+    if (
+        !Number.isInteger(Number(categoria_id)) ||
+        Number(categoria_id) <= 0 ||
+        !Number.isInteger(Number(fonte_destino_id)) ||
+        Number(fonte_destino_id) <= 0
+    ) {
+        return res.status(400).json({
+            erro: 'Categoria ou fonte/destino inválido'
+        });
+    }
+
+    Lancamentos.create(dados, req.auth.id, (erro, resultado) => {
+        if (erro) {
+            return res.status(500).json({
+                erro: erro.message
+            });
+        }
+
+        return res.status(201).json({
+            mensagem: 'Lançamento criado com sucesso',
+            id: resultado.insertId
+        });
+    });
+});
 
 routes.put('/:id', autenticacao, (req, res) => {
     const id = Number(req.params.id);

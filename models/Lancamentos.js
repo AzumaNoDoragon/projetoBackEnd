@@ -6,10 +6,17 @@ class Lancamentos {
             if (erro) {
                 return callback(erro);
             }
+
             const {
-                tipo, descricao, valor, data, categoria_id,
-                fonte_destino_id, parcela_atual = 1,
-                total_parcelas = 1, grupo_parcelamento = null
+                tipo,
+                descricao,
+                valor,
+                data,
+                categoria_id,
+                fonte_destino_id,
+                parcela_atual = 1,
+                total_parcelas = 1,
+                grupo_parcelamento = null
             } = dados;
 
             const sql = `
@@ -21,18 +28,25 @@ class Lancamentos {
             `;
 
             const valores = [
-                usuarioId, tipo, descricao, valor, data,
-                categoria_id, fonte_destino_id, parcela_atual,
-                total_parcelas, grupo_parcelamento
+                usuarioId,
+                tipo,
+                descricao,
+                valor,
+                data,
+                categoria_id,
+                fonte_destino_id,
+                parcela_atual,
+                total_parcelas,
+                grupo_parcelamento
             ];
 
             connection.query(sql, valores, (erro, resultado) => {
                 connection.end();
-                callback(erro, resultado)
+                callback(erro, resultado);
             });
-        }) 
+        });
     }
-
+    
     read(filtro, usuarioId, callback) {
         conectar((erro, connection) => {
             if (erro) {
