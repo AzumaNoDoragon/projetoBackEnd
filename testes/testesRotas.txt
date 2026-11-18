@@ -1,0 +1,23 @@
+# GET - Listar lançamentos
+curl -X GET "http://localhost:3000/lancamentos"
+
+# GET - Listar lançamentos com filtros e paginação
+curl -X GET "http://localhost:3000/lancamentos?inicio=2026-11-01&fim=2026-11-30&tipo=saida&categoriaId=3&fonteDestinoId=2&pagina=1"
+
+# GET - Buscar lançamento por ID
+curl -X GET "http://localhost:3000/lancamentos/1"
+
+# POST - Criar lançamento simples
+curl -X POST "http://localhost:3000/lancamentos" -H "Content-Type: application/json" -d "{\"tipo\":\"saida\",\"descricao\":\"Compra no mercado\",\"valor\":150.00,\"data\":\"2026-11-16\",\"categoria_id\":2,\"fonte_destino_id\":1}"
+
+# POST - Criar lançamento parcelado (cartão de crédito)
+curl -X POST "http://localhost:3000/lancamentos" -H "Content-Type: application/json" -d "{\"tipo\":\"saida\",\"descricao\":\"Compra de notebook\",\"valor\":3000.00,\"data\":\"2026-11-16\",\"categoria_id\":2,\"fonte_destino_id\":5,\"parcelas\":3}"
+
+# PUT - Atualizar lançamento
+curl -X PUT "http://localhost:3000/lancamentos/1" -H "Content-Type: application/json" -d "{\"tipo\":\"saida\",\"descricao\":\"Compra atualizada\",\"valor\":180.00,\"data\":\"2026-11-16\",\"categoria_id\":2,\"fonte_destino_id\":1}"
+
+# DELETE - Excluir lançamento individual
+curl -X DELETE "http://localhost:3000/lancamentos/1"
+
+# DELETE - Excluir todas as parcelas de um lançamento
+curl -X DELETE "http://localhost:3000/lancamentos/1?todasParcelas=true"
