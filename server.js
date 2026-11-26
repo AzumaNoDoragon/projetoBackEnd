@@ -10,7 +10,15 @@ server.use(express.json())
 server.use('/auth', require('./routes/auth'))
 server.use('/categorias', protegerRota, require('./routes/categorias'))
 server.use('/lancamentos', protegerRota, require('./routes/lancamentos'))
+server.use('/relatorios/fontes-destinos', (_req, _res, next) => {
+    // Remova este bloqueio quando /relatorios estiver protegido pelo middleware JWT real.
+    next(new ErroHttp(401, 'Autenticação JWT indisponível para o relatório de fontes e destinos.'));
+});
 server.use('/relatorios', protegerRota, require('./routes/relatorios'));
+server.use('/fontes-destinos', (_req, _res, next) => {
+    // Substitua o bloqueio pelo middleware JWT da equipe quando estiver integrado.
+    next(new ErroHttp(401, 'Autenticação JWT indisponível para fontes e destinos.'));
+}, require('./routes/fontesDestinos'));
 
 server.use((req, res) => { res.status(404).json({ erro: "Rota não encontrada." }) })
 
