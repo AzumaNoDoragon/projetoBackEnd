@@ -47,10 +47,10 @@ function validarDia(valor, campo) {
 }
 
 function validarLimite(valor) {
-    if (typeof valor !== 'string') {
-        throw invalido('O limite deve ser uma string decimal positiva.');
+    if (typeof valor !== 'string' && !(typeof valor === 'number' && Number.isFinite(valor))) {
+        throw invalido('O limite deve ser uma string decimal ou um número finito positivo.');
     }
-    const texto = valor;
+    const texto = String(valor);
     if (!/^\d{1,10}(\.\d{1,2})?$/.test(texto) || !/[1-9]/.test(texto)) {
         throw invalido('O limite deve ser positivo, até 9999999999.99 e ter no máximo duas casas decimais.');
     }

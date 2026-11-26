@@ -142,15 +142,24 @@ test('FonteDestino: integração isolada com MySQL', { concurrency: false }, asy
             assert.deepEqual(await chamar('listar', a), antes);
         });
 
-        await t.test('rejeita limite não textual, zero, negativo ou fora do formato', async () => {
+        await t.test('rejeita limite de tipo inválido, zero, negativo ou com precisão excessiva', async () => {
             const antes = await chamar('listar', a);
-            const limites = [1234.5, 0, null, undefined, true, {}, [], '', '0', '0.00',
+            const limites = [NaN, Infinity, -Infinity, -1, 1.234, 0.1 + 0.2, 10000000000, 0, null, undefined, true, {}, [], '', '0', '0.00',
                 '-1.00', '1,00', '1.234', '10000000000.00', ' 1.00', '1e3', 'NaN'];
             for (const limite of limites) {
                 await assert.rejects(() => criar(a, { ...cartao('limite'), limite }),
                     erro('DADOS_INVALIDOS', 400));
             }
             assert.deepEqual(await chamar('listar', a), antes);
+        });
+
+        await t.test('aceita limites numericos e textuais com persistencia decimal normalizada', async () => {
+            for (const [i, limite] of [2500, 2500.50, 0.01, 9999999999.99, '2500.00'].entries()) {
+                const registro = await criar(a, { ...cartao(`numero_${i}`), limite });
+                const esperado = Number(limite).toFixed(2);
+                assert.equal(registro.limite, esperado);
+                assert.equal((await chamar('buscarPorId', a, registro.id)).limite, esperado);
+            }
         });
 
         await t.test('impede nome duplicado por usuário e permite entre usuários', async () => {
@@ -192,8 +201,8 @@ test('FonteDestino: integração isolada com MySQL', { concurrency: false }, asy
             assert.deepEqual(await chamar('atualizar', a, inicial.id, { tipo: 'conta' }), esperado);
             esperado = { ...esperado, ...cartao('editado'), limite: '1234.50' };
             assert.deepEqual(await chamar('atualizar', a, inicial.id, cartao('editado')), esperado);
-            await assert.rejects(() => chamar('atualizar', a, inicial.id, { limite: 100 }),
-                erro('DADOS_INVALIDOS', 400));
+            esperado = { ...esperado, limite: '100.00' };
+            assert.deepEqual(await chamar('atualizar', a, inicial.id, { limite: 100 }), esperado);
             await assert.rejects(() => chamar('atualizar', a, inicial.id, { tipo: 'renda' }),
                 erro('DADOS_INVALIDOS', 400));
             assert.deepEqual(await chamar('buscarPorId', a, inicial.id), esperado);
