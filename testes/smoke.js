@@ -20,6 +20,7 @@ async function chamar(metodo, caminho, { corpo, token, bruto } = {}) {
     if (token) headers.Authorization = `Bearer ${token}`;
     const r = await fetch(BASE + caminho, {
         method: metodo, headers,
+        signal: AbortSignal.timeout(10000),
         body: corpo === undefined ? undefined : (bruto ? corpo : JSON.stringify(corpo)),
     });
     const texto = await r.text();
@@ -28,14 +29,10 @@ async function chamar(metodo, caminho, { corpo, token, bruto } = {}) {
     return { status: r.status, json, texto };
 }
 
-let ok = 0, falhas = 0, avisos = 0;
+let ok = 0, falhas = 0;
 async function teste(nome, fn) {
     try { await fn(); ok++; console.log(`  OK     ${nome}`); }
     catch (e) { falhas++; console.log(`  FALHOU ${nome}\n         -> ${e.message}`); }
-}
-async function aviso(nome, fn) { // não conta como falha; aponta risco
-    try { await fn(); console.log(`  OK     ${nome}`); }
-    catch (e) { avisos++; console.log(`  AVISO  ${nome}\n         -> ${e.message}`); }
 }
 const esperar = (cond, msg) => { if (!cond) throw new Error(msg); };
 const status = (r, esperado) => esperar(r.status === esperado, `status ${r.status} (esperado ${esperado}) — ${r.texto.slice(0, 220)}`);
@@ -59,10 +56,11 @@ const formatarCpf = (c) => `${c.slice(0, 3)}.${c.slice(3, 6)}.${c.slice(6, 9)}-$
     // ---------- login com os usuários do seed ----------
     const lb = await chamar('POST', '/auth/login', { corpo: { email: 'bruno@email.com', senha: SENHA } });
     const la = await chamar('POST', '/auth/login', { corpo: { email: 'ana@email.com', senha: SENHA } });
-    if (lb.status !== 200 || la.status !== 200 || !lb.json.token || !la.json.token) {
+    if (lb.status !== 200 || la.status !== 200 || !lb.json?.token || !la.json?.token) {
         console.log(`Não foi possível entrar com os usuários do seed (login Bruno: ${lb.status}, Ana: ${la.status}).`);
         console.log('Rode "npm run db:init" e "npm run db:seed" em um banco vazio e confira o .env (JWT_SECRET preenchido).');
-        process.exit(1);
+        process.exitCode = 1;
+        return;
     }
     const T = lb.json.token;      // Bruno (id 2)
     const TA = la.json.token;     // Ana (id 1)
@@ -190,10 +188,18 @@ const formatarCpf = (c) => `${c.slice(0, 3)}.${c.slice(3, 6)}.${c.slice(6, 9)}-$
         erroPadrao(await p({ nome: 'TESTE x', tipo: 'cartao_credito', dia_fechamento: 5, dia_vencimento: 10, limite: '0' }), 400);
         erroPadrao(await p({ nome: '', tipo: 'conta' }), 400);
     });
-    await aviso('POST cartão com limite NUMÉRICO (ex.: 2500) é aceito', async () => {
-        const r = await chamar('POST', '/fontes-destinos', { token: T, corpo: { nome: 'TESTE limite numérico', tipo: 'cartao_credito', dia_fechamento: 1, dia_vencimento: 8, limite: 2500 } });
-        if (r.status === 201) { await chamar('DELETE', `/fontes-destinos/${dadosDe(r).id}`, { token: T }); return; }
-        throw new Error(`recusou limite numérico (${r.status}). O enunciado fala em "limite (> 0)"; se a professora testar com número, vai falhar — vale aceitar número também.`);
+    await teste('POST cartão com limite NUMÉRICO → 201, decimal normalizado e limpeza', async () => {
+        const r = await chamar('POST', '/fontes-destinos', { token: T, corpo: { nome: 'TESTE limite numérico', tipo: 'cartao_credito', dia_fechamento: 1, dia_vencimento: 8, limite: 2500.50 } });
+        status(r, 201);
+        const cartao = dadosDe(r);
+        try {
+            esperar(cartao.limite === '2500.50', 'limite numérico não normalizado');
+            const salvo = await chamar('GET', `/fontes-destinos/${cartao.id}`, { token: T });
+            status(salvo, 200);
+            esperar(dadosDe(salvo).limite === '2500.50', 'limite numérico não persistido');
+        } finally {
+            status(await chamar('DELETE', `/fontes-destinos/${cartao.id}`, { token: T }), 204);
+        }
     });
     await teste('GET /fontes-destinos/:id → 200; de outro usuário → 404; id inválido → 400', async () => {
         status(await chamar('GET', `/fontes-destinos/${idFonte}`, { token: T }), 200);
@@ -243,7 +249,10 @@ const formatarCpf = (c) => `${c.slice(0, 3)}.${c.slice(3, 6)}.${c.slice(6, 9)}-$
     });
     await teste('PUT /lancamentos/:id → 200 e altera os dados', async () => {
         const r = await chamar('PUT', `/lancamentos/${idSimples}`, { token: T, corpo: { tipo: 'saida', descricao: 'TESTE atualizado', valor: 50, data: DATA, categoriaId: CAT_SAIDA, fonteDestinoId: FONTE_CONTA } });
-        status(r, 200); esperar(r.json.descricao === 'TESTE atualizado' && r.json.valor === 50, 'não atualizou');
+        status(r, 200);
+        const salvo = await chamar('GET', `/lancamentos/${idSimples}`, { token: T });
+        status(salvo, 200);
+        esperar(salvo.json.descricao === 'TESTE atualizado' && salvo.json.valor === 50, 'não persistiu a atualização');
     });
     await teste('POST parcelado (R$ 100 em 3x no cartão) → 33,34 + 33,33 + 33,33 com o mesmo grupo', async () => {
         status(await chamar('POST', '/lancamentos', { token: T, corpo: { tipo: 'saida', descricao: 'TESTE parcelado', valor: 100, data: DATA, categoriaId: CAT_SAIDA, fonteDestinoId: FONTE_CARTAO, parcelas: 3 } }), 201);
@@ -350,6 +359,6 @@ const formatarCpf = (c) => `${c.slice(0, 3)}.${c.slice(3, 6)}.${c.slice(6, 9)}-$
     await teste('Rota inexistente → 404 em JSON', async () => erroPadrao(await chamar('GET', '/nao-existe', { token: T }), 404));
     await teste('JSON malformado → 400 em JSON', async () => erroPadrao(await chamar('POST', '/lancamentos', { token: T, corpo: '{quebrado', bruto: true }), 400));
 
-    console.log(`\n${ok} passaram, ${falhas} falharam${avisos ? `, ${avisos} aviso(s)` : ''}.`);
-    process.exit(falhas ? 1 : 0);
-})().catch((e) => { console.error(`Não foi possível chamar a API em ${BASE}: ${e.message}`); process.exit(1); });
+    console.log(`\n${ok} passaram, ${falhas} falharam.`);
+    process.exitCode = falhas ? 1 : 0;
+})().catch((e) => { console.error(`Não foi possível chamar a API em ${BASE}: ${e.message}`); process.exitCode = 1; });

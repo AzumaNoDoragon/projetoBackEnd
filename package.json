@@ -11,7 +11,8 @@
     "db:seed": "node database/seed.js",
     "test:integracao": "node testes/executar-integracao.cjs",
     "db:seed:gerar": "node database/seed.js --gerar",
-    "test:rotas": "node testes/smoke.js"
+    "test:rotas": "node testes/smoke.js",
+    "test:rotas:isolado": "node testes/executar-smoke-isolado.cjs"
   },
   "repository": {
     "type": "git",
