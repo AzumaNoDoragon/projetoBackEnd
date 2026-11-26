@@ -1,12 +1,13 @@
 /*
- * Execução futura, a partir da raiz do projeto (Node.js com node:test):
- *   DB_NAME=financas_teste node --test testes/fontesDestinos.integracao.test.js
+ * Execução futura a partir da raiz do projeto (Node.js com node:test)
+ *   DOTENV_OVERRIDE=false DB_NAME=financas_teste node --test testes/fontesDestinos.integracao.test.js
  *
- * Pré-requisitos: financas_teste já existe e recebeu database/schema.sql;
- * DB_HOST, DB_PORT, DB_USER e DB_PASSWORD estão no ambiente ou no .env.
- * Este arquivo não cria bancos nem tabelas e não modifica o .env.
- * DB_NAME deve ser fornecido explicitamente no ambiente, mesmo usando .env.
- * O model abre conexões próprias: a limpeza é explícita, não por rollback.
+ * financas_teste deve existir com as tabelas do schema. Configure DB_HOST,
+ * DB_PORT, DB_USER e DB_PASSWORD no ambiente ou no .env.
+ * Evite usar o db:init atual para preparar o banco isolado. O arquivo
+ * database/schema.sql contém CREATE DATABASE e USE com o nome fixo financas.
+ * A suíte verifica o banco do pool e da conexão avulsa antes de gravar dados.
+ * A conexão avulsa prepara e limpa os dados, e a suíte encerra os dois recursos.
  */
 'use strict';
 
@@ -20,20 +21,19 @@ function exigirBancoDeTeste() {
 }
 
 test('FonteDestino: integração isolada com MySQL', { concurrency: false }, async (t) => {
-    // Antes até de carregar connection.js (que carrega dotenv) ou abrir conexões.
+    exigirBancoDeTeste();
+    const { pool } = require('../database/connection');
+    t.after(async () => {
+        await pool.end();
+    });
+
+    // A conexão carrega dotenv. Confira DB_NAME novamente antes de carregar o model.
     exigirBancoDeTeste();
     const FonteDestino = require('../models/FonteDestino');
     const mysql = require('mysql2/promise');
-    exigirBancoDeTeste();
 
-    const banco = await mysql.createConnection({
-        host: process.env.DB_HOST,
-        port: process.env.DB_PORT || 3306,
-        user: process.env.DB_USER,
-        password: process.env.DB_PASSWORD,
-        database: 'financas_teste',
-        multipleStatements: false
-    });
+    const [[atualPool]] = await pool.query('SELECT DATABASE() AS nome');
+    assert.equal(atualPool.nome, 'financas_teste', 'Execução bloqueada: o pool deve usar financas_teste.');
 
     const marca = `it_${randomUUID().replace(/-/g, '')}`;
     const usuarios = [];
@@ -73,9 +73,18 @@ test('FonteDestino: integração isolada com MySQL', { concurrency: false }, asy
         dia_fechamento: 5, dia_vencimento: 12, limite: '001234.5'
     });
 
+    const banco = await mysql.createConnection({
+        host: process.env.DB_HOST,
+        port: process.env.DB_PORT || 3306,
+        user: process.env.DB_USER,
+        password: process.env.DB_PASSWORD,
+        database: 'financas_teste',
+        multipleStatements: false
+    });
+
     try {
         const [[atual]] = await sql('SELECT DATABASE() AS nome');
-        assert.equal(atual.nome, 'financas_teste');
+        assert.equal(atual.nome, 'financas_teste', 'Execução bloqueada: a conexão avulsa deve usar financas_teste.');
 
         const cpfs = new Set();
         for (const sufixo of ['a', 'b']) {
@@ -238,6 +247,7 @@ test('FonteDestino: integração isolada com MySQL', { concurrency: false }, asy
         falha = erroRecebido;
     } finally {
         const erros = falha ? [falha] : [];
+        // As listas só recebem registros após a confirmação dos dois bancos.
         // Cada DELETE usa IDs retornados pelos INSERTs desta execução.
         // Tentamos todos os passos e encerramos a conexão mesmo se algum falhar.
         for (const [tabela, registros] of [
