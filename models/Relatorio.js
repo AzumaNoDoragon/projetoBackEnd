@@ -91,6 +91,50 @@ class Relatorio {
 
         return { dataReferencia: hoje, cartoes: resultado };
     }
+
+    async fontesDestinos(usuarioId, inicio, fim) {
+        const [fontes] = await pool.execute(
+            `SELECT f.id, f.nome, f.tipo,
+                    SUM(CASE WHEN l.tipo = 'entrada' THEN l.valor END) AS entradas,
+                    SUM(CASE WHEN l.tipo = 'saida' THEN l.valor END) AS saidas,
+                    COALESCE(SUM(CASE l.tipo
+                        WHEN 'entrada' THEN l.valor
+                        WHEN 'saida' THEN -l.valor
+                    END), 0) AS saldo
+             FROM fontes_destinos f
+             LEFT JOIN lancamentos l
+                ON l.fonte_destino_id = f.id
+               AND l.usuario_id = f.usuario_id
+               AND l.data BETWEEN ? AND ?
+             WHERE f.usuario_id = ?
+             GROUP BY f.id, f.nome, f.tipo
+             ORDER BY f.nome, f.id`,
+            [inicio, fim, usuarioId]
+        );
+
+        const entradas = [];
+        const saidas = [];
+        const contas = [];
+
+        for (const fonte of fontes) {
+            const { id, nome, tipo } = fonte;
+            const totalEntradas = Number(fonte.entradas ?? 0);
+            const totalSaidas = Number(fonte.saidas ?? 0);
+
+            // SUM retorna NULL quando não há lançamentos do tipo correspondente.
+            if (fonte.entradas !== null) {
+                entradas.push({ id, nome, tipo, total: totalEntradas });
+            }
+            if (fonte.saidas !== null) {
+                saidas.push({ id, nome, tipo, total: totalSaidas });
+            }
+            if (tipo === 'conta') {
+                contas.push({ id, nome, entradas: totalEntradas, saidas: totalSaidas, saldo: Number(fonte.saldo) });
+            }
+        }
+
+        return { periodo: { inicio, fim }, entradas, saidas, contas };
+    }
 }
 
 module.exports = new Relatorio();
