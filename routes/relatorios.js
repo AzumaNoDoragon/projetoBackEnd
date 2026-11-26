@@ -33,11 +33,6 @@ router.get('/faturas', async (req, res) => {
     return res.status(200).json(resultado);
 });
 
-<<<<<<< HEAD
-module.exports = router;
-=======
-// GET /relatorios/fontes-destinos pode ser adicionado neste mesmo Router.
-
 const RelatorioCategoria = require('../models/RelatorioCategoria');
 
 const DIA_EM_MS = 24 * 60 * 60 * 1000;
@@ -121,7 +116,4 @@ router.get('/categorias', async (req, res, next) => {
     }
 });
 
-
 module.exports = router;
-
->>>>>>> ffe072269c4364bcd9f7acacaae0abe1536443ce
