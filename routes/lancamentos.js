@@ -50,13 +50,8 @@ routes.put('/:id', autenticacao, async (req, res) => {
 routes.delete('/:id', autenticacao, async (req, res) => {
     const id = validarId(req.params.id);
     const todasParcelas = req.query.todasParcelas === 'true';
-    const excluidos = await Lancamentos.delete(id, req.auth.id, todasParcelas);
-    return res.status(200).json({
-        mensagem: todasParcelas
-            ? 'Lançamentos excluídos com sucesso'
-            : 'Lançamento excluído com sucesso',
-        excluidos
-    });
+    await Lancamentos.delete(id, req.auth.id, todasParcelas);
+    return res.status(204).end();
 });
 
 module.exports = routes;
