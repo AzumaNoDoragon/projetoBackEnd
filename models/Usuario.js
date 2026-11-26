@@ -1,66 +1,79 @@
-const conectar = require('../database/connection')
+const { pool } = require('../database/connection');
 
 const categoriasPadrao = [
-    ['salário', 'entrada'],
-    ['outras entradas', 'entrada'],
-    ['alimentação', 'saida'],
-    ['moradia', 'saida'],
-    ['mobilidade', 'saida'],
-    ['lazer', 'saida'],
-    ['saúde', 'saida'],
-    ['educação', 'saida'],
-    ['outras saidas', 'saida']
-]
+    ['Salário', 'entrada'],
+    ['Outras entradas', 'entrada'],
+    ['Alimentação', 'saida'],
+    ['Moradia', 'saida'],
+    ['Mobilidade', 'saida'],
+    ['Lazer', 'saida'],
+    ['Saúde', 'saida'],
+    ['Educação', 'saida'],
+    ['Outras saídas', 'saida']
+];
 
-class Usuario{
+class Usuario {
+    async inserir(db, { nome, email, cpf, senhaHash }) {
+        const [resultado] = await db.execute(
+            'INSERT INTO usuarios (nome, email, cpf, senha_hash) VALUES (?, ?, ?, ?)',
+            [nome, email, cpf, senhaHash]
+        );
 
-    async inserir (db, {nome, email, cpf, senhaHash}) {
-        const sql = `INSERT INTO usuarios (nome, email, cpf, senha_hash)
-        VALUES (?, ?, ?, ?)`
-
-        const [resultado] = await db.execute(sql, [nome, email, cpf, senhaHash])
-        return resultado.insertId
+        return resultado.insertId;
     }
 
-    async cadastrar(dados){
-        const conexao = await new Promise((resolve, reject) => {
-            conectar((erro, conecction) => {
-                if(erro) return reject(erro)
-                    resolve(conecction)
-            })
-        })
-        const bd = conexao.promise()
-        try{
-            await bd.beginTransaction()
-            const UsuarioId = await this.inserir(bd, dados)
+    async cadastrar(dados) {
+        const conexao = await pool.getConnection();
 
-            const sqlCategoria = `INSERT INTO categorias (usuario_id, nome, tipo)
-            Values (?, ?, ?)`
+        try {
+            await conexao.beginTransaction();
 
-            for (const [nome, tipo] of categoriasPadrao){
-                await bd.execute(sqlCategoria, [UsuarioId, nome, tipo])
+            const usuarioId = await this.inserir(conexao, dados);
+
+            for (const [nome, tipo] of categoriasPadrao) {
+                await conexao.execute(
+                    'INSERT INTO categorias (usuario_id, nome, tipo) VALUES (?, ?, ?)',
+                    [usuarioId, nome, tipo]
+                );
             }
 
-            const sqlConta = `INSERT INTO fontes_destinos (usuario_id, nome, tipo)
-            Values (?, ?, ?)`
+            await conexao.execute(
+                'INSERT INTO fontes_destinos (usuario_id, nome, tipo) VALUES (?, ?, ?)',
+                [usuarioId, 'Conta corrente', 'conta']
+            );
 
-            await bd.execute(sqlConta, [
-                UsuarioId,
-                'conta corrente',
-                'conta'
-            ])
-            await bd.commit()
-            return UsuarioId
+            await conexao.commit();
+            return usuarioId;
+        } catch (erro) {
+            try {
+                await conexao.rollback();
+            } catch (erroRollback) {
+                console.error('Falha ao desfazer o cadastro:', erroRollback);
+            }
 
-
-        }catch(error){
-            await bd.rollback()
-            throw error
-        }finally{
-            await bd.end()
+            throw erro;
+        } finally {
+            conexao.release();
         }
     }
 
+    async buscarPorEmail(email) {
+        const [usuarios] = await pool.execute(
+            'SELECT id, nome, email, senha_hash FROM usuarios WHERE email = ?',
+            [email]
+        );
+
+        return usuarios[0] ?? null;
+    }
+
+    async buscarPorId(id) {
+        const [usuarios] = await pool.execute(
+            'SELECT id, nome, email, cpf, criado_em FROM usuarios WHERE id = ?',
+            [id]
+        );
+
+        return usuarios[0] ?? null;
+    }
 }
 
-module.exports = new Usuario()
+module.exports = new Usuario();
