@@ -2,6 +2,8 @@ const express = require('express')
 const { cpfValido } = require('../utils/cpf')
 const bcrypt = require('bcrypt')
 const Usuario = require('../models/Usuario')
+const jwt = require('jsonwebtoken')
+const protegerRota = require('../middleware/auth')
 
 const router = express.Router()
 
@@ -72,6 +74,80 @@ router.post('/cadastro', async (req, res) => {
         }
 
         throw erro
+    }
+})
+
+router.post('/login', async (req, res) => {
+    const { email, senha } = req.body ?? {}
+    const erros = {}
+
+    if (
+        typeof email !== 'string' ||
+        email.trim().length > 160 ||
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+    ) {
+        erros.email = 'informe um e-mail válido com até 160 caracteres.'
+    }
+
+    if (typeof senha !== 'string' || !senha.trim()) {
+        erros.senha = 'informe a senha.'
+    }
+
+    if (Object.keys(erros).length > 0) {
+        return res.status(400).json({
+            erro: 'Dados inválidos.',
+            campos: erros
+        })
+    }
+
+    const usuario = await Usuario.buscarPorEmail(email.trim().toLowerCase())
+
+    if (!usuario) {
+        return res.status(401).json({ erro: 'e-mail ou senha inválidos' })
+    }
+    const senhaConfere = await bcrypt.compare(senha, usuario.senha_hash)
+    if(!senhaConfere){
+      return res.status(401).json({
+         erro: 'e-mail ou senha inválidos'
+      })
+    }
+
+    const token = jwt.sign(
+        {
+            id: usuario.id,
+            nome: usuario.nome,
+            email: usuario.email
+        },
+        process.env.JWT_SECRET,
+        {
+            algorithm: 'HS256',
+            expiresIn: '1h'
+        }
+    )
+
+   return res.status(200).json({
+      token,
+      usuario: {
+         id: usuario.id,
+         nome: usuario.nome,
+         email: usuario.email
+      }
+   }) 
+})
+
+router.get('/me', protegerRota, async (req, res, next) => {
+    try {
+        const usuario = await Usuario.buscarPorId(req.auth.id)
+
+        if (!usuario) {
+            return res.status(404).json({
+                erro: 'Usuário não encontrado.'
+            })
+        }
+
+        return res.status(200).json(usuario)
+    } catch (erro) {
+        return next(erro)
     }
 })
 
