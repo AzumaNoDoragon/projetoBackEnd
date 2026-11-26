@@ -1,4 +1,4 @@
-const conectar = require('../database/connection');
+const { pool } = require('../database/connection');
 
 const CAMPOS = ['nome', 'tipo', 'dia_fechamento', 'dia_vencimento', 'limite'];
 const COLUNAS = 'id, usuario_id, nome, tipo, dia_fechamento, dia_vencimento, limite';
@@ -105,28 +105,9 @@ function tratarErro(erro) {
     return new ErroFonteDestino('ERRO_INTERNO', 'Não foi possível concluir a operação de fontes e destinos.', 500);
 }
 
-async function comConexao(operacao) {
+async function comTratamentoDeErro(operacao) {
     try {
-        // O segundo argumento definido faz connection.js selecionar DB_NAME.
-        const connection = await new Promise((resolve, reject) => {
-            conectar((erro, conexao) => erro ? reject(erro) : resolve(conexao), true);
-        });
-        const banco = connection.promise();
-        try {
-            return await operacao(banco);
-        } finally {
-            try {
-                await banco.end();
-            } catch {
-                // Uma falha de limpeza não altera o resultado nem o erro da operação.
-                console.error('Falha ao encerrar a conexão de fontes e destinos.');
-                try {
-                    connection.destroy();
-                } catch {
-                    console.error('Não foi possível liberar a conexão de fontes e destinos.');
-                }
-            }
-        }
+        return await operacao();
     } catch (erro) {
         throw tratarErro(erro);
     }
@@ -140,8 +121,8 @@ function naoEncontrado() {
 async function criar(usuarioId, dados) {
     const usuario = validarId(usuarioId, 'usuario_id');
     const registro = validarDados(dados);
-    return comConexao(async (banco) => {
-        const [resultado] = await banco.execute(
+    return comTratamentoDeErro(async () => {
+        const [resultado] = await pool.execute(
             `INSERT INTO fontes_destinos
                 (usuario_id, nome, tipo, dia_fechamento, dia_vencimento, limite)
              VALUES (?, ?, ?, ?, ?, ?)`,
@@ -154,8 +135,8 @@ async function criar(usuarioId, dados) {
 /** listar(usuarioId): Promise<registro[]>; retorna apenas registros do usuário. */
 async function listar(usuarioId) {
     const usuario = validarId(usuarioId, 'usuario_id');
-    return comConexao(async (banco) => {
-        const [registros] = await banco.execute(
+    return comTratamentoDeErro(async () => {
+        const [registros] = await pool.execute(
             `SELECT ${COLUNAS} FROM fontes_destinos WHERE usuario_id = ? ORDER BY nome, id`,
             [usuario]
         );
@@ -167,8 +148,8 @@ async function listar(usuarioId) {
 async function buscarPorId(usuarioId, id) {
     const usuario = validarId(usuarioId, 'usuario_id');
     const fonteId = validarId(id, 'id');
-    return comConexao(async (banco) => {
-        const [registros] = await banco.execute(
+    return comTratamentoDeErro(async () => {
+        const [registros] = await pool.execute(
             `SELECT ${COLUNAS} FROM fontes_destinos WHERE usuario_id = ? AND id = ?`,
             [usuario, fonteId]
         );
@@ -188,9 +169,11 @@ async function atualizar(usuarioId, id, dados) {
     validarCampos(dados);
     // Copia somente propriedades próprias antes de aguardar a conexão.
     const alteracoes = { ...dados };
-    return comConexao(async (banco) => {
-        await banco.beginTransaction();
+    return comTratamentoDeErro(async () => {
+        const banco = await pool.getConnection();
+        let reutilizavel = true;
         try {
+            await banco.beginTransaction();
             const [registros] = await banco.execute(
                 `SELECT ${COLUNAS} FROM fontes_destinos WHERE usuario_id = ? AND id = ? FOR UPDATE`,
                 [usuario, fonteId]
@@ -218,13 +201,23 @@ async function atualizar(usuarioId, id, dados) {
             await banco.commit();
             return { id: fonteId, usuario_id: usuario, ...registro };
         } catch (erro) {
-            // Preserva o erro original mesmo se a conexão impedir o rollback.
             try {
                 await banco.rollback();
             } catch {
-                // comConexao ainda tentará encerrar a conexão.
+                // Descarta a conexão se o rollback não confirmar o fim da transação.
+                reutilizavel = false;
             }
             throw erro;
+        } finally {
+            try {
+                if (reutilizavel) {
+                    banco.release();
+                } else {
+                    banco.destroy();
+                }
+            } catch {
+                console.error('Não foi possível liberar a conexão de fontes e destinos.');
+            }
         }
     });
 }
@@ -236,8 +229,8 @@ async function atualizar(usuarioId, id, dados) {
 async function excluir(usuarioId, id) {
     const usuario = validarId(usuarioId, 'usuario_id');
     const fonteId = validarId(id, 'id');
-    return comConexao(async (banco) => {
-        const [resultado] = await banco.execute(
+    return comTratamentoDeErro(async () => {
+        const [resultado] = await pool.execute(
             'DELETE FROM fontes_destinos WHERE usuario_id = ? AND id = ?',
             [usuario, fonteId]
         );
