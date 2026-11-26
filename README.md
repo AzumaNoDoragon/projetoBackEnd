@@ -140,7 +140,7 @@ Representa o fluxo de acesso às rotas protegidas da API, desde o envio do token
 ### 1. Clonar o repositório
 
 ```bash
-git clone [URL_DO_REPOSITORIO](https://github.com/AzumaNoDoragon/projetoBackEnd)
+git clone https://github.com/AzumaNoDoragon/projetoBackEnd.git
 cd projetoBackEnd
 ```
 
@@ -300,3 +300,42 @@ O desafio de saúde financeira poderá ser desenvolvido como funcionalidade adic
 
 Programação Web Back End — Projeto 2
 API de Controle Financeiro
+
+## Politica do periodo anterior (RF7)
+
+Interpretacao adotada pelo grupo para conciliar a expressao "mesmo tamanho" com o exemplo explicito do enunciado:
+
+- Periodos que comecam no primeiro dia de um mes e terminam no ultimo dia de um mes comparam a mesma quantidade de **meses civis completos** imediatamente anteriores.
+- Periodos parciais comparam o intervalo imediatamente anterior com **igual quantidade de dias**, contando as duas pontas.
+
+Exemplos (`periodo` -> `periodoAnterior`):
+
+```text
+2026-10-01 a 2026-10-31 -> 2026-09-01 a 2026-09-30
+2026-11-01 a 2026-11-30 -> 2026-10-01 a 2026-10-31
+2027-01-01 a 2027-01-31 -> 2026-12-01 a 2026-12-31
+2026-10-01 a 2026-11-30 -> 2026-08-01 a 2026-09-30
+2024-03-01 a 2024-03-31 -> 2024-02-01 a 2024-02-29
+2025-03-01 a 2025-03-31 -> 2025-02-01 a 2025-02-28
+2026-11-10 a 2026-11-15 -> 2026-11-04 a 2026-11-09
+```
+
+O calculo e unico em `utils/datas.js`, em UTC, e e usado pela rota e pelas interfaces `Relatorio.categorias` e `RelatorioCategoria.gerar`. Datas invalidas, ordem invertida ou comparacao anterior ao ano 1000 retornam 400. O intervalo aceito permanece entre os anos 1000 e 9999.
+
+## Contratos e validacao do smoke
+
+`PUT /lancamentos/:id` retorna 200 com mensagem de sucesso. Para conferir a persistencia, consulte o mesmo ID por GET; o smoke confirma descricao e valor nessa consulta.
+
+Cartoes aceitam `limite` como string decimal (`"2500.00"`) ou numero JSON finito positivo (`2500`, `2500.50`). Maximo: 9999999999.99, com ate duas casas decimais. Persistencia e retorno continuam como string normalizada com duas casas. Booleanos, objetos, arrays, null, zero, negativos, valores nao finitos e precisao excessiva sao rejeitados, sem arredondamento silencioso.
+
+```powershell
+npm test
+npm run test:integracao
+npm run test:rotas:isolado
+```
+
+O ultimo comando cria banco exclusivo novo `teste_financas_smoke_<timestamp>_<aleatorio>`, aplica init/seed uma unica vez e inicia sua propria API em porta livre com JWT_SECRET sintetico. Confere o banco pelo pool do processo da API antes de executar **`npm run test:rotas`** com BASE_URL explicita. Ao finalizar, encerra essa instancia e remove somente o banco que criou. Nao reutiliza o banco de demonstracao da equipe. Exige permissoes MySQL para criar/remover bancos e rotinas do seed. Em interrupcao forcada, confira a origem de qualquer recurso temporario antes de limpa-lo manualmente.
+
+`npm run test:rotas` sozinho usa BASE_URL (padrao localhost:3000) e grava dados. Use-o apenas depois de conferir que a instancia aponta para banco exclusivo de testes, novo e com seed. O smoke nao apaga o usuario criado no cadastro: no executor isolado, ele e removido junto com o banco temporario.
+
+Validacao em 26/11/2026: npm test com 64 aprovados, integracao com 109 aprovados e smoke isolado com 44 aprovados, sem falhas. As contagens incluem testes compartilhados.

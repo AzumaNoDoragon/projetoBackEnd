@@ -1,7 +1,7 @@
 # Requisições de teste (curl, formato do Prompt de Comando do Windows)
 
-Enquanto o login não estiver integrado, o `authMock` fixa o usuário (`req.auth.id = 2`, Bruno).
-Depois da integração, troque `SEU_TOKEN_AQUI` pelo token do `POST /auth/login`.
+As rotas privadas usam autenticacao JWT real.
+Substitua `SEU_TOKEN_AQUI` pelo token recebido do `POST /auth/login`.
 Seed: `ana@email.com` (id 1) e `bruno@email.com` (id 2), senha `Senha1234`.
 
 ## Lançamentos
@@ -65,3 +65,10 @@ curl "http://localhost:3000/relatorios/faturas?meses=13" -H "Authorization: Bear
 ```bash
 curl "http://localhost:3000/lancamentos"
 ```
+
+## Contratos conferidos pelo smoke
+
+- PUT de lancamento: 200 com mensagem; GET posterior do mesmo ID confirma descricao e valor persistidos.
+- Limite do cartao aceita `"2500.00"`, `2500` e `2500.50`, mantendo retorno textual decimal normalizado. Mais de duas casas e valor acima de 9999999999.99 retornam 400.
+- RF7 usa meses civis anteriores para intervalos de meses completos e dias de igual duracao para intervalos parciais. Novembro/2026 compara outubro inteiro; 10/11 a 15/11 compara 04/11 a 09/11. Esta e a interpretacao adotada pelo grupo; os sete exemplos estao no README.
+- Rode `npm run test:rotas:isolado` para preparar API/banco exclusivos e executar `npm run test:rotas`. O banco de demonstracao da equipe nao deve ser usado para o smoke.

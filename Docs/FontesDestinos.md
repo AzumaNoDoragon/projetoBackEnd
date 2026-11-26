@@ -26,9 +26,9 @@ Os exemplos desta seção usam dados fictícios. Substitua `TOKEN_EXEMPLO` pelo 
 | `tipo` | Obrigatório no cadastro. Aceita `renda`, `conta` ou `cartao_credito`. |
 | `dia_fechamento` | Obrigatório para `cartao_credito`. Número inteiro de 1 a 31. Para `renda` e `conta`, omita ou envie `null`. |
 | `dia_vencimento` | Obrigatório para `cartao_credito`. Número inteiro de 1 a 31. Para `renda` e `conta`, omita ou envie `null`. |
-| `limite` | Obrigatório para `cartao_credito`. String decimal positiva com até 10 dígitos antes do ponto e até duas casas decimais, limitada a `"9999999999.99"`. Para `renda` e `conta`, omita ou envie `null`. |
+| `limite` | Obrigatório para `cartao_credito`. String decimal ou numero JSON finito positivo, com ate duas casas decimais e maximo de `9999999999.99`. Para `renda` e `conta`, omita ou envie `null`. |
 
-O corpo de `POST` ou `PUT` deve ser um objeto JSON com apenas os campos da tabela. `id` e `usuario_id` aparecem na resposta. O banco gera o `id` do registro, e o model recebe `usuario_id` da identidade autenticada. O `:id` da URL deve ser um inteiro positivo até `2147483647`. O retorno de `limite` para cartões é uma string normalizada com duas casas decimais. Para rendas e contas, os três campos de cartão retornam `null`.
+O corpo de `POST` ou `PUT` deve ser um objeto JSON com apenas os campos da tabela. `id` e `usuario_id` aparecem na resposta. O banco gera o `id` do registro, e o model recebe `usuario_id` da identidade autenticada. O `:id` da URL deve ser um inteiro positivo até `2147483647`. Entradas numericas validas tambem sao convertidas sem arredondamento para texto decimal. Booleanos, arrays, objetos, null, zero, negativos, nao finitos e precisao excessiva sao rejeitados. O retorno de `limite` para cartões é uma string normalizada com duas casas decimais. Para rendas e contas, os três campos de cartão retornam `null`.
 
 - `renda` identifica uma fonte de receita, como salário. `conta` identifica uma conta que pode receber entradas e saídas. `cartao_credito` identifica um cartão com dias de fechamento e vencimento e limite de crédito.
 - A unicidade de `nome` é por usuário e vale entre todos os tipos. Dois usuários podem usar o mesmo nome.
@@ -241,16 +241,16 @@ Os bloqueios temporários foram removidos. O servidor aplica `protegerRota` às 
 
 ## 5. Testes automatizados
 
-| Suíte | Cobertura | Aprovados no backup |
+| Suíte | Cobertura | Aprovados em 26/11/2026 |
 | --- | --- | ---: |
-| [`testes/fontesDestinos.integracao.test.js`](../testes/fontesDestinos.integracao.test.js) | CRUD real no MySQL, incluindo validações, isolamento, duplicidade e vínculos. | 9 |
+| [`testes/fontesDestinos.integracao.test.js`](../testes/fontesDestinos.integracao.test.js) | CRUD real no MySQL, incluindo validações, isolamento, duplicidade e vínculos. | 10 |
 | [`testes/fontesDestinos.rotas.test.js`](../testes/fontesDestinos.rotas.test.js) | Contrato HTTP do CRUD e autenticação JWT dos cinco endpoints na montagem do servidor. | 22 |
 | [`testes/relatorioFontesDestinos.integracao.test.js`](../testes/relatorioFontesDestinos.integracao.test.js) | RF8 real no MySQL, incluindo agregação, datas de fronteira, vínculos cruzados, valores monetários, parcelas e preservação dos registros. | 20 |
 | [`testes/relatorioFontesDestinos.rotas.test.js`](../testes/relatorioFontesDestinos.rotas.test.js) | Identidade, validação do período, formato do JSON, erros HTTP e autenticação JWT do RF8, de faturas e de categorias. | 28 |
 | [`testes/fontesDestinos.e2e.test.js`](../testes/fontesDestinos.e2e.test.js) | Cadastro, login, CRUD, lançamentos e RF8 com JWT e MySQL reais no mesmo fluxo. | 5 |
-| **Total na versão de segurança** | **Nenhuma falha registrada** | **84** |
+| **Total atual** | **Nenhuma falha registrada** | **85** |
 
-As contagens registram a validação da versão de segurança `backup/fontes-destinos-integracao` no commit `cade3f9`. Nas suítes de integração e no E2E, o total do `node:test` inclui o teste pai que prepara e encerra os subtestes.
+As contagens registram a execucao real nesta revisao, a partir de `0ad2720`, incluindo a nova regressao de limites numericos. Nas suítes de integração e no E2E, o total do `node:test` inclui o teste pai que prepara e encerra os subtestes.
 
 As suítes de integração usam os models e o pool reais, com uma conexão auxiliar para preparar e limpar os dados. Conferem `DB_NAME` e executam `SELECT DATABASE()` no pool e na conexão auxiliar antes de inserir. Criam registros exclusivos de cada execução e limpam apenas os registros inseridos, na ordem lançamentos, fontes e destinos, categorias e usuários. O pool e a conexão auxiliar são encerrados ao final.
 
