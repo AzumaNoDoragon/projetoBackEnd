@@ -6,7 +6,6 @@ module.exports = async function ({ registrar, requisicao, pool, ana, tokenA, tok
     const FonteDestino = require('../models/FonteDestino');
     const Relatorio = require('../models/Relatorio');
     const RelatorioCategoria = require('../models/RelatorioCategoria');
-    const { periodoAnterior } = require('../utils/datas');
     let cartao, compra;
 
     await registrar('Senha: limites ASCII e UTF-8, sem truncar nem remover espacos', async () => {
@@ -158,11 +157,16 @@ module.exports = async function ({ registrar, requisicao, pool, ana, tokenA, tok
     });
 
     await registrar('Relatorio de categorias delega ao mesmo calculo e periodo anterior', async () => {
-        for (const [inicio, fim] of [['2026-11-01', '2026-11-30'], ['2026-11-10', '2026-11-15'], ['2027-01-01', '2027-01-31'], ['2024-02-01', '2024-02-29']]) {
-            const anterior = periodoAnterior(inicio, fim);
-            const esperado = await RelatorioCategoria.gerar(ana.id, inicio, fim, anterior.inicio, anterior.fim);
+        for (const [inicio, fim, anteriorInicio, anteriorFim] of require('./periodos.cjs')) {
+            const esperado = await RelatorioCategoria.gerar(ana.id, inicio, fim);
+            assert.deepEqual(esperado.periodoAnterior, { inicio: anteriorInicio, fim: anteriorFim });
             assert.deepEqual(await Relatorio.categorias(ana.id, inicio, fim), esperado);
             assert.deepEqual(await requisicao('GET', `/relatorios/categorias?inicio=${inicio}&fim=${fim}`, tokenA), esperado);
+        }
+        for (const [inicio, fim] of [['1000-01-01', '1000-01-31'], ['2026-11-30', '2026-11-01'], ['2026-02-30', '2026-03-01']]) {
+            await assert.rejects(Relatorio.categorias(ana.id, inicio, fim), e => e.status === 400);
+            await assert.rejects(RelatorioCategoria.gerar(ana.id, inicio, fim), e => e.status === 400);
+            await requisicao('GET', `/relatorios/categorias?inicio=${inicio}&fim=${fim}`, tokenA, undefined, 400);
         }
     });
 };

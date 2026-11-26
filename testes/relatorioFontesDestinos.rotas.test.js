@@ -28,7 +28,7 @@ const RELATORIO = {
 const FATURAS = { dataReferencia: INICIO, cartoes: [] };
 const CATEGORIAS = {
     periodo: PERIODO,
-    periodoAnterior: { inicio: '2026-10-02', fim: '2026-10-31' },
+    periodoAnterior: { inicio: '2026-10-01', fim: '2026-10-31' },
     saidas: { total: 0, categorias: [] },
     entradas: { total: 0, categorias: [] }
 };
@@ -415,6 +415,5 @@ test('o relatório de categorias continua acessível com JWT válido', async (t)
     assert.deepEqual(await requisitar(caminho), JWT_REJEITADO);
     assert.equal(modelCategoria.gerar.mock.callCount(), 0);
     assert.deepEqual(await requisitar(caminho, { token }), { status: 200, corpo: CATEGORIAS });
-    const anterior = CATEGORIAS.periodoAnterior;
-    assert.deepEqual(argumentos(modelCategoria.gerar), [[USUARIO, INICIO, FIM, anterior.inicio, anterior.fim]]);
+    assert.deepEqual(argumentos(modelCategoria.gerar), [[USUARIO, INICIO, FIM]]);
 });

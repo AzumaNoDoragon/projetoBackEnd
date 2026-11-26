@@ -90,25 +90,13 @@ router.get('/categorias', async (req, res, next) => {
         });
     }
 
-    const anterior = periodoAnterior(inicio, fim);
-    if (anterior.inicio < '1000-01-01') {
-        return res.status(400).json({
-            erro: 'dados inválidos.',
-            campos: {
-                inicio: 'o período anterior deve permanecer a partir do ano 1000.'
-            }
-        });
-    }
-
-    const { inicio: inicioAnterior, fim: fimAnterior } = anterior;
+    periodoAnterior(inicio, fim); // Valida tambem a faixa do periodo de comparacao.
 
     try {
         const relatorio = await RelatorioCategoria.gerar(
             req.auth.id,
             inicio,
-            fim,
-            inicioAnterior,
-            fimAnterior
+            fim
         );
 
         return res.status(200).json(relatorio);

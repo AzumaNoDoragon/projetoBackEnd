@@ -1,14 +1,13 @@
 const { pool } = require('../database/connection');
 const { calcularFatura } = require('../utils/faturas');
-const { hojeISO, periodoAnterior } = require('../utils/datas');
+const { hojeISO } = require('../utils/datas');
 
 const emCentavos = (valor) => Math.round(Number(valor) * 100);
 const emReais = (centavos) => centavos / 100;
 
 class Relatorio {
     async categorias(usuarioId, inicio, fim) {
-        const anterior = periodoAnterior(inicio, fim);
-        return require('./RelatorioCategoria').gerar(usuarioId, inicio, fim, anterior.inicio, anterior.fim);
+        return require('./RelatorioCategoria').gerar(usuarioId, inicio, fim);
     }
 
     async faturas(usuarioId, meses, hoje = hojeISO()) {

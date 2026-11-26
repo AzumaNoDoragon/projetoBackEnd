@@ -194,14 +194,15 @@ require(${JSON.stringify(path.join(raiz, 'server.js'))});`;
             ]) await requisicao('POST', '/lancamentos', tokenA, dados, 201);
             await requisicao('POST', '/lancamentos', tokenB, novoLancamento('saida', 9999, '2026-11-15', catsB.find(c => c.tipo === 'saida').id, fonteB), 201);
             const rel = await requisicao('GET', '/relatorios/categorias?inicio=2026-11-01&fim=2026-11-30', tokenA);
-            assert.deepEqual(rel.periodoAnterior, { inicio: '2026-10-02', fim: '2026-10-31' });
+            assert.deepEqual(rel.periodoAnterior, { inicio: '2026-10-01', fim: '2026-10-31' });
             assert.equal(rel.saidas.total, 300);
             assert.equal(rel.entradas.total, 1000);
             assert.deepEqual(rel.saidas.categorias.map(c => c.total), [200, 100, 0]);
             const [principal, nova, anterior] = rel.saidas.categorias;
             assert.equal(principal.percentual, 66.67);
-            assert.equal(principal.anterior, 100);
-            assert.equal(principal.variacao, 100);
+            // Outubro completo inclui tambem os R$ 999 de 01/10.
+            assert.equal(principal.anterior, 1099);
+            assert.equal(principal.variacao, -81.8);
             assert.equal(nova.percentual, 33.33);
             assert.equal(nova.variacao, null);
             assert.equal(anterior.variacao, -100);

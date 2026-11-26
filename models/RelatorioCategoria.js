@@ -1,9 +1,12 @@
 const { pool } = require('../database/connection');
 
+const { periodoAnterior } = require('../utils/datas');
+
 const arredondar = (valor) => Number(valor.toFixed(2));
 
 class RelatorioCategoria {
-    async gerar(usuarioId, inicio, fim, inicioAnterior, fimAnterior) {
+    async gerar(usuarioId, inicio, fim) {
+        const { inicio: inicioAnterior, fim: fimAnterior } = periodoAnterior(inicio, fim);
         const [linhas] = await pool.execute(
             `SELECT
                 c.id,

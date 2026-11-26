@@ -16,15 +16,17 @@ test('Parcelas preservam centavos, resto na primeira e rejeitam parcela zero', (
     }
 });
 
-for (const [inicio, fim, anteriorInicio, anteriorFim] of [
-    ['2026-11-01', '2026-11-30', '2026-10-02', '2026-10-31'],
-    ['2026-11-10', '2026-11-15', '2026-11-04', '2026-11-09'],
-    ['2027-01-01', '2027-01-31', '2026-12-01', '2026-12-31'],
-    ['2024-02-01', '2024-02-29', '2024-01-03', '2024-01-31'],
-    ['2025-02-01', '2025-02-28', '2025-01-04', '2025-01-31'],
-    ['2026-11-01', '2026-11-01', '2026-10-31', '2026-10-31']
-]) test(`Periodo anterior tem igual duracao: ${inicio} a ${fim}`, () => {
-    assert.deepEqual(periodoAnterior(inicio, fim), { inicio: anteriorInicio, fim: anteriorFim });
+for (const [inicio, fim, anteriorInicio, anteriorFim] of require('./periodos.cjs')) {
+    test(`Periodo anterior: meses completos ou dias parciais de ${inicio} a ${fim}`, () => {
+        assert.deepEqual(periodoAnterior(inicio, fim), { inicio: anteriorInicio, fim: anteriorFim });
+    });
+}
+
+test('Periodo anterior rejeita datas invalidas, ordem e saida da faixa aceita', () => {
+    for (const [inicio, fim] of [['2026-02-30', '2026-03-01'], ['2026-11-30', '2026-11-01'],
+        ['1000-01-01', '1000-01-31'], ['1000-01-01', '1000-01-02'], ['0999-12-31', '1000-01-01'], ['9999-12-31', '10000-01-01']]) {
+        assert.throws(() => periodoAnterior(inicio, fim), e => e.status === 400);
+    }
 });
 
 test('Faturas: fechamento inclusive, dezembro, fevereiro comum e bissexto', () => {
