@@ -1,5 +1,4 @@
-CREATE DATABASE IF NOT EXISTS financas;
-USE financas;
+-- O inicializador cria e seleciona DB_NAME antes de executar este schema.
 
 CREATE TABLE IF NOT EXISTS usuarios (
     id          INT AUTO_INCREMENT PRIMARY KEY,

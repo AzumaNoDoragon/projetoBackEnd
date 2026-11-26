@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcrypt');
 const mysql = require('mysql2');
-const conectar = require('./connection');
+const { configuracao } = require('./config');
 const { dividirEmParcelas } = require('../utils/parcelas');
 
 const SENHA = 'Senha1234';
@@ -79,18 +79,26 @@ lancar(ana, 'saida', 'Geladeira', 1800, '2026-11-20', 'Moradia', 4, 3, GRUPO_GEL
 // Bruno: compra parcelada no cartão
 lancar(bruno, 'saida', 'Celular', 1200, '2026-11-10', 'Outras saídas', 8, 2, GRUPO_CELULAR);
 
-(async () => {
+async function gerarSql() {
     const hash = await bcrypt.hash(SENHA, 10);
-    const ids = (lista) => lista.map((x) => x.id ?? x).join(', ');
     const f = mysql.format;
-
-    let sql = `USE ${process.env.DB_NAME || 'financas'};\n\n`;
-    sql += '-- Limpa os dados de demonstração (ordem respeita as chaves estrangeiras)\n';
-    sql += `DELETE FROM lancamentos WHERE usuario_id IN (${ids(usuarios)});\n`;
-    sql += `DELETE FROM fontes_destinos WHERE usuario_id IN (${ids(usuarios)});\n`;
-    sql += `DELETE FROM categorias WHERE usuario_id IN (${ids(usuarios)});\n`;
-    sql += `DELETE FROM usuarios WHERE id IN (${ids(usuarios)});\n\n`;
-
+    // Sem USE: o banco deve ser selecionado explicitamente pelo executor.
+    let sql = `-- Demonstracao ficticia; executar via npm run db:seed em banco vazio.
+DELIMITER $$
+CREATE PROCEDURE seed_financas_demo()
+BEGIN
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+    SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+    START TRANSACTION;
+    IF EXISTS (SELECT id FROM usuarios) OR EXISTS (SELECT id FROM categorias)
+       OR EXISTS (SELECT id FROM fontes_destinos) OR EXISTS (SELECT id FROM lancamentos) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Seed exige as quatro tabelas vazias; nenhum dado foi alterado.';
+    END IF;
+`;
     sql += f('INSERT INTO usuarios (id, nome, email, cpf, senha_hash) VALUES ?;\n',
         [usuarios.map((u) => [u.id, u.nome, u.email, u.cpf, hash])]);
 
@@ -103,21 +111,40 @@ lancar(bruno, 'saida', 'Celular', 1200, '2026-11-10', 'Outras saídas', 8, 2, GR
     sql += f(`INSERT INTO lancamentos (usuario_id, tipo, descricao, valor, data, categoria_id,
     fonte_destino_id, parcela_atual, total_parcelas, grupo_parcelamento) VALUES ?;\n`, [lancamentos]);
 
-    fs.writeFileSync(path.join(__dirname, 'seed.sql'), sql);
-    console.log('Arquivo database/seed.sql gerado.');
+    sql += '    COMMIT;\nEND$$\nDELIMITER ;\nCALL seed_financas_demo();\nDROP PROCEDURE seed_financas_demo;\n';
+    return sql;
+}
 
-    conectar((erro, connection) => {
-        if (erro) {
-            console.error('Não foi possível conectar ao banco.');
-            return;
-        }
-        connection.query(sql, (erro) => {
-            if (erro) {
-                console.error('Erro ao inserir dados: ', erro.message);
-            } else {
-                console.log('Dados inseridos! Usuários: ana@email.com e bruno@email.com (senha: ' + SENHA + ')');
-            }
-            connection.end();
-        });
+async function executarSeed(sql) {
+    const banco = await require('mysql2/promise').createConnection({
+        ...configuracao(), multipleStatements: true
     });
-})();
+    let procedimentoCriado = false;
+    try {
+        // Executa separadamente para remover apenas a rotina criada nesta execucao.
+        const procedimento = sql.slice(sql.indexOf('CREATE PROCEDURE'), sql.indexOf('END$$') + 3);
+        await banco.query(procedimento);
+        procedimentoCriado = true;
+        await banco.query('CALL seed_financas_demo()');
+        console.log('Dados ficticios de demonstracao inseridos.');
+    } finally {
+        try {
+            if (procedimentoCriado) await banco.query('DROP PROCEDURE seed_financas_demo');
+        } finally { await banco.end(); }
+    }
+}
+
+async function main() {
+    if (process.argv.includes('--gerar')) {
+        fs.writeFileSync(path.join(__dirname, 'seed.sql'), await gerarSql());
+        console.log('Arquivo database/seed.sql gerado, sem acessar o banco.');
+        return;
+    }
+    await executarSeed(fs.readFileSync(path.join(__dirname, 'seed.sql'), 'utf8'));
+}
+
+if (require.main === module) main().catch(() => {
+    console.error('Falha no seed: exige banco configurado vazio e permissao para criar rotinas. Nenhum dado existente deve ser removido.');
+    process.exitCode = 1;
+});
+module.exports = { gerarSql, executarSeed };

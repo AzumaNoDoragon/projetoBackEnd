@@ -1,16 +1,9 @@
 const mysql = require('mysql2');
-require('dotenv').config();
+const { configuracao, nomeBanco } = require('./config');
+const configBase = configuracao(null);
 
-const configBase = {
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    port: process.env.DB_PORT || 3306,
-    dateStrings: true
-};
-
-// Conexão avulsa com callback (usada pelos scripts init.js e seed.js)
-function conectar(callback, database = process.env.DB_NAME) {
+// Conexao avulsa com callback, preservada para os consumidores existentes.
+function conectar(callback, database = nomeBanco()) {
     const connection = mysql.createConnection({
         ...configBase,
         database: database,
@@ -19,7 +12,8 @@ function conectar(callback, database = process.env.DB_NAME) {
 
     connection.connect((erro) => {
         if (erro) {
-            console.error('Erro ao conectar no banco:', erro);
+            console.error('Erro ao conectar no banco.');
+            connection.destroy();
             callback(erro, null);
             return;
         }
@@ -30,7 +24,7 @@ function conectar(callback, database = process.env.DB_NAME) {
 
 const pool = mysql.createPool({
     ...configBase,
-    database: process.env.DB_NAME,
+    database: nomeBanco(),
     waitForConnections: true,
     connectionLimit: 10
 }).promise();
