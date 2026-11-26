@@ -30,10 +30,11 @@ router.post('/cadastro', async (req, res) => {
     if (
         typeof senha !== 'string' ||
         senha.length < 8 ||
+        Buffer.byteLength(senha, 'utf8') > 72 ||
         !/[A-Za-z]/.test(senha) ||
         !/\d/.test(senha)
     ) {
-        erros.senha = 'a senha deve ter pelo menos 8 caracteres, com letras e números.'
+        erros.senha = 'a senha deve ter pelo menos 8 caracteres, com letras e números, e no máximo 72 bytes em UTF-8.'
     }
 
     if (Object.keys(erros).length > 0) {
@@ -89,8 +90,8 @@ router.post('/login', async (req, res) => {
         erros.email = 'informe um e-mail válido com até 160 caracteres.'
     }
 
-    if (typeof senha !== 'string' || !senha.trim()) {
-        erros.senha = 'informe a senha.'
+    if (typeof senha !== 'string' || !senha.trim() || Buffer.byteLength(senha, 'utf8') > 72) {
+        erros.senha = 'informe a senha com no máximo 72 bytes em UTF-8.'
     }
 
     if (Object.keys(erros).length > 0) {
