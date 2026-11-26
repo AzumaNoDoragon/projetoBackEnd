@@ -52,56 +52,6 @@ class Relatorio {
         };
     }
 
-    // RF8 — Entradas por fonte, saídas por destino e saldo das contas no período.
-    async fontesDestinos(usuarioId, inicio, fim) {
-        const [linhas] = await pool.query(
-            `SELECT f.id, f.nome, f.tipo,
-                    COALESCE(SUM(CASE WHEN l.tipo = 'entrada' THEN l.valor END), 0) AS entradas,
-                    COALESCE(SUM(CASE WHEN l.tipo = 'saida' THEN l.valor END), 0) AS saidas
-             FROM fontes_destinos f
-             LEFT JOIN lancamentos l
-                    ON l.fonte_destino_id = f.id AND l.usuario_id = ? AND l.data BETWEEN ? AND ?
-             WHERE f.usuario_id = ?
-             GROUP BY f.id, f.nome, f.tipo
-             ORDER BY f.nome`,
-            [usuarioId, inicio, fim, usuarioId]
-        );
-
-        const itens = linhas.map((l) => ({
-            id: l.id,
-            nome: l.nome,
-            tipo: l.tipo,
-            entradas: emCentavos(l.entradas),
-            saidas: emCentavos(l.saidas)
-        }));
-
-        const lista = (campo) => {
-            const filtrados = itens.filter((i) => i[campo] > 0).sort((a, b) => b[campo] - a[campo]);
-            return {
-                total: emReais(filtrados.reduce((soma, i) => soma + i[campo], 0)),
-                itens: filtrados.map((i) => ({ id: i.id, nome: i.nome, tipo: i.tipo, total: emReais(i[campo]) }))
-            };
-        };
-
-        const entradas = lista('entradas');
-        const saidas = lista('saidas');
-
-        return {
-            periodo: { inicio, fim },
-            entradas: { total: entradas.total, fontes: entradas.itens },
-            saidas: { total: saidas.total, destinos: saidas.itens },
-            contas: itens
-                .filter((i) => i.tipo === 'conta')
-                .map((i) => ({
-                    id: i.id,
-                    nome: i.nome,
-                    entradas: emReais(i.entradas),
-                    saidas: emReais(i.saidas),
-                    saldo: emReais(i.entradas - i.saidas)
-                }))
-        };
-    }
-
     async faturas(usuarioId, meses, hoje = hojeISO()) {
         const [cartoes] = await pool.query(
             `SELECT id, nome, dia_fechamento, dia_vencimento, limite

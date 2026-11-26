@@ -2,12 +2,14 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { randomBytes } = require('node:crypto');
 const { once } = require('node:events');
 const { readFileSync } = require('node:fs');
 const { createServer } = require('node:http');
 const { join } = require('node:path');
 const { compileFunction } = require('node:vm');
 const express = require('express');
+const jwt = require('jsonwebtoken');
 const ErroHttp = require('../utils/erros');
 const datas = require('../utils/datas');
 
@@ -24,6 +26,13 @@ const RELATORIO = {
     contas: [{ id: 12, nome: 'Conta', entradas: 120.3, saidas: 140.1, saldo: -19.8 }]
 };
 const FATURAS = { dataReferencia: INICIO, cartoes: [] };
+const CATEGORIAS = {
+    periodo: PERIODO,
+    periodoAnterior: { inicio: '2026-10-02', fim: '2026-10-31' },
+    saidas: { total: 0, categorias: [] },
+    entradas: { total: 0, categorias: [] }
+};
+const CHAVE_JWT_TESTE = randomBytes(32).toString('hex');
 const IDENTIDADE_INVALIDA = {
     status: 401,
     corpo: { erro: 'Autenticação necessária ou identidade inválida.' }
@@ -37,31 +46,36 @@ const PERIODO_INVALIDO = {
         }
     }
 };
-const RF8_BLOQUEADO = {
+const JWT_REJEITADO = {
     status: 401,
-    corpo: { erro: 'Autenticação JWT indisponível para o relatório de fontes e destinos.' }
+    corpo: { erro: 'Token ausente, inválido ou expirado.' }
 };
 
 function carregarIsolado(arquivo, dependencias, consoleTeste = console) {
     const caminho = join(__dirname, '..', arquivo);
-    const executar = compileFunction(readFileSync(caminho, 'utf8'), ['require', 'module', 'console'], { filename: caminho });
+    const executar = compileFunction(
+        readFileSync(caminho, 'utf8'),
+        ['require', 'module', 'console', 'process'],
+        { filename: caminho }
+    );
     const modulo = { exports: {} };
     executar((nome) => {
         assert.ok(Object.hasOwn(dependencias, nome), 'Dependência indisponível no teste: ' + nome);
         return dependencias[nome];
-    }, modulo, consoleTeste);
+    }, modulo, consoleTeste, { env: { JWT_SECRET: CHAVE_JWT_TESTE } });
     return modulo.exports;
+}
+
+const protegerRota = carregarIsolado('middleware/auth.js', { 'express-jwt': require('express-jwt') });
+
+function emitirToken(id, { chave = CHAVE_JWT_TESTE, validade = '1h' } = {}) {
+    return jwt.sign({ id }, chave, { algorithm: 'HS256', expiresIn: validade });
 }
 
 function montarServidorPrincipal(t, router) {
     const app = express();
     let tratarErros;
     const registrarErro = t.mock.fn();
-    const autenticacaoTemporaria = t.mock.fn((req, _res, next) => {
-        req.auth = { id: 2 };
-        next();
-    });
-
     // Executa os registros reais de server.js com dependências isoladas e intercepta listen.
     function criarExpress() {
         return {
@@ -80,15 +94,16 @@ function montarServidorPrincipal(t, router) {
         express: criarExpress,
         dotenv: { config() {} },
         './utils/erros': ErroHttp,
-        './middleware/authMock': autenticacaoTemporaria,
+        './middleware/auth': protegerRota,
         './routes/auth': express.Router(),
+        './routes/categorias': express.Router(),
         './routes/lancamentos': express.Router(),
         './routes/relatorios': router,
         './routes/fontesDestinos': express.Router()
     }, { error: registrarErro });
 
     assert.equal(typeof tratarErros, 'function', 'Middleware global de erros não encontrado.');
-    return { app, tratarErros, autenticacaoTemporaria, registrarErro };
+    return { app, tratarErros, registrarErro };
 }
 
 function montarRouterIsolado(router, tratarErros) {
@@ -103,7 +118,7 @@ function montarRouterIsolado(router, tratarErros) {
     return app;
 }
 
-async function iniciarHttp(t, app) {
+async function iniciarHttp(t, app, identidadeSimulada) {
     const servidor = createServer(app);
     t.after(async () => {
         if (!servidor.listening) return;
@@ -118,8 +133,10 @@ async function iniciarHttp(t, app) {
     await escutando;
     const origem = 'http://127.0.0.1:' + servidor.address().port;
 
-    return async (caminho = CONSULTA, { auth = { id: USUARIO }, metodo = 'GET' } = {}) => {
-        const headers = auth === null ? {} : { 'x-auth-teste': JSON.stringify(auth) };
+    return async (caminho = CONSULTA, { auth = { id: USUARIO }, metodo = 'GET', token } = {}) => {
+        const headers = {};
+        if (identidadeSimulada && auth !== null) headers['x-auth-teste'] = JSON.stringify(auth);
+        if (token !== undefined) headers.authorization = 'Bearer ' + token;
         const resposta = await fetch(origem + caminho, {
             method: metodo,
             headers,
@@ -136,15 +153,18 @@ async function preparar(t, { servidorPrincipal = false } = {}) {
         fontesDestinos: t.mock.fn(async () => RELATORIO),
         faturas: t.mock.fn(async () => FATURAS)
     };
+    const modelCategoria = { gerar: t.mock.fn(async () => CATEGORIAS) };
     const router = carregarIsolado('routes/relatorios.js', {
         express,
         '../models/Relatorio': model,
+        '../models/RelatorioCategoria': modelCategoria,
         '../utils/erros': ErroHttp,
         '../utils/datas': datas
     });
-    const { app, tratarErros, autenticacaoTemporaria, registrarErro } = montarServidorPrincipal(t, router);
-    const requisitar = await iniciarHttp(t, servidorPrincipal ? app : montarRouterIsolado(router, tratarErros));
-    return { requisitar, model, autenticacaoTemporaria, registrarErro };
+    const { app, tratarErros, registrarErro } = montarServidorPrincipal(t, router);
+    const aplicativo = servidorPrincipal ? app : montarRouterIsolado(router, tratarErros);
+    const requisitar = await iniciarHttp(t, aplicativo, !servidorPrincipal);
+    return { requisitar, model, modelCategoria, registrarErro };
 }
 
 function urlPeriodo(inicio, fim) {
@@ -322,42 +342,79 @@ test('encaminha erro inesperado ao middleware global e retorna 500 sem expor det
     assert.deepEqual(argumentos(model.fontesDestinos), [[USUARIO, INICIO, FIM]]);
 });
 
-test('o servidor principal bloqueia o RF8 antes de chamar authMock ou o model', async (t) => {
-    const { requisitar, model, autenticacaoTemporaria } = await preparar(t, { servidorPrincipal: true });
-    assert.deepEqual(await requisitar(), RF8_BLOQUEADO);
-    assert.equal(autenticacaoTemporaria.mock.callCount(), 0);
+test('o JWT rejeita o RF8 com token ausente, inválido, mal assinado ou expirado', async (t) => {
+    const { requisitar, model } = await preparar(t, { servidorPrincipal: true });
+    const casos = [
+        ['ausente', undefined],
+        ['inválido', 'token-invalido'],
+        ['assinatura incorreta', emitirToken(USUARIO, { chave: randomBytes(32).toString('hex') })],
+        ['expirado', emitirToken(USUARIO, { validade: -1 })]
+    ];
+
+    for (const [caso, token] of casos) {
+        const resposta = await requisitar(CONSULTA + '&usuario_id=' + USUARIO, { token });
+        assert.deepEqual(resposta, JWT_REJEITADO, caso);
+    }
     assert.equal(model.fontesDestinos.mock.callCount(), 0);
 });
 
-test('bloqueia as variantes aceitas pelo router, incluindo maiúsculas, barra final e HEAD', async (t) => {
-    const isolado = await preparar(t);
-    const principal = await preparar(t, { servidorPrincipal: true });
-    const variantes = [ROTA, ROTA + '/', '/RELATORIOS/FONTES-DESTINOS', '/Relatorios/Fontes-Destinos/'];
+test('o RF8 usa o ID de cada JWT válido mesmo com usuario_id na query', async (t) => {
+    const { requisitar, model } = await preparar(t, { servidorPrincipal: true });
+    const caminho = CONSULTA + '&id=91&usuario_id=92';
 
-    for (const variante of variantes) {
-        const caminho = variante + '?' + new URLSearchParams(PERIODO);
-        assert.equal((await isolado.requisitar(caminho)).status, 200);
-        assert.equal((await isolado.requisitar(caminho, { metodo: 'HEAD' })).status, 200);
-        assert.deepEqual(await principal.requisitar(caminho), RF8_BLOQUEADO);
-        assert.deepEqual(await principal.requisitar(caminho, { metodo: 'HEAD' }), { status: 401, corpo: undefined });
+    for (const id of [31, 32]) {
+        assert.deepEqual(await requisitar(caminho, { token: emitirToken(id) }), { status: 200, corpo: RELATORIO });
     }
-    assert.equal(principal.autenticacaoTemporaria.mock.callCount(), 0);
-    assert.equal(principal.model.fontesDestinos.mock.callCount(), 0);
+    assert.deepEqual(argumentos(model.fontesDestinos), [[31, INICIO, FIM], [32, INICIO, FIM]]);
 });
 
-test('o bloqueio do RF8 preserva /relatorios/faturas na montagem do servidor', async (t) => {
-    const { requisitar, model, autenticacaoTemporaria } = await preparar(t, { servidorPrincipal: true });
+test('o JWT protege o RF8 em GET e HEAD com maiúsculas e barra final', async (t) => {
+    const { requisitar, model } = await preparar(t, { servidorPrincipal: true });
+    const token = emitirToken(USUARIO);
+    const variantes = [ROTA, ROTA + '/', '/RELATORIOS/FONTES-DESTINOS', '/Relatorios/Fontes-Destinos/'];
+    const caminhos = variantes.map((variante) => variante + '?' + new URLSearchParams(PERIODO));
+
+    for (const caminho of caminhos) {
+        assert.deepEqual(await requisitar(caminho), JWT_REJEITADO, caminho);
+        assert.deepEqual(await requisitar(caminho, { metodo: 'HEAD' }), { status: 401, corpo: undefined }, caminho);
+    }
+    assert.equal(model.fontesDestinos.mock.callCount(), 0);
+
+    for (const caminho of caminhos) {
+        assert.deepEqual(await requisitar(caminho, { token }), { status: 200, corpo: RELATORIO }, caminho);
+        assert.deepEqual(await requisitar(caminho, { token, metodo: 'HEAD' }), { status: 200, corpo: undefined }, caminho);
+    }
+    const chamada = [USUARIO, INICIO, FIM];
+    assert.deepEqual(argumentos(model.fontesDestinos), caminhos.flatMap(() => [chamada, chamada]));
+});
+
+test('o relatório de faturas continua acessível e valida meses com JWT válido', async (t) => {
+    const { requisitar, model } = await preparar(t, { servidorPrincipal: true });
+    const token = emitirToken(USUARIO);
     const esperado = { status: 200, corpo: FATURAS };
-    assert.deepEqual(await requisitar('/relatorios/faturas'), esperado);
-    assert.deepEqual(await requisitar('/relatorios/faturas?meses=7'), esperado);
-    assert.deepEqual(await requisitar('/relatorios/faturas?meses=13'), {
+    assert.deepEqual(await requisitar('/relatorios/faturas'), JWT_REJEITADO);
+    assert.equal(model.faturas.mock.callCount(), 0);
+    assert.deepEqual(await requisitar('/relatorios/faturas', { token }), esperado);
+    assert.deepEqual(await requisitar('/relatorios/faturas?meses=7', { token }), esperado);
+    assert.deepEqual(await requisitar('/relatorios/faturas?meses=13', { token }), {
         status: 400,
         corpo: {
             erro: 'Dados inválidos.',
             campos: { meses: 'Informe um número inteiro de 1 a 12.' }
         }
     });
-    assert.deepEqual(argumentos(model.faturas), [[2, 3], [2, 7]]);
-    assert.equal(autenticacaoTemporaria.mock.callCount(), 3);
+    assert.deepEqual(argumentos(model.faturas), [[USUARIO, 3], [USUARIO, 7]]);
     assert.equal(model.fontesDestinos.mock.callCount(), 0);
+});
+
+test('o relatório de categorias continua acessível com JWT válido', async (t) => {
+    const { requisitar, modelCategoria } = await preparar(t, { servidorPrincipal: true });
+    const caminho = '/relatorios/categorias?' + new URLSearchParams(PERIODO);
+    const token = emitirToken(USUARIO);
+
+    assert.deepEqual(await requisitar(caminho), JWT_REJEITADO);
+    assert.equal(modelCategoria.gerar.mock.callCount(), 0);
+    assert.deepEqual(await requisitar(caminho, { token }), { status: 200, corpo: CATEGORIAS });
+    const anterior = CATEGORIAS.periodoAnterior;
+    assert.deepEqual(argumentos(modelCategoria.gerar), [[USUARIO, INICIO, FIM, anterior.inicio, anterior.fim]]);
 });

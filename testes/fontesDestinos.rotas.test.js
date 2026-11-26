@@ -2,18 +2,23 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { randomBytes } = require('node:crypto');
 const { once } = require('node:events');
 const { readFileSync } = require('node:fs');
 const { createServer } = require('node:http');
 const { join } = require('node:path');
 const { compileFunction } = require('node:vm');
 const express = require('express');
+const jwt = require('jsonwebtoken');
 const ErroHttp = require('../utils/erros');
 
+const ROTA = '/fontes-destinos';
 const USUARIO = 7;
 const OUTRO_USUARIO = 8;
 const DADOS_VALIDOS = { nome: 'Reserva', tipo: 'conta' };
 const NAO_ENCONTRADO = 'Fonte ou destino não encontrado.';
+const CHAVE_JWT_TESTE = randomBytes(32).toString('hex');
+const JWT_REJEITADO = erroEsperado(401, 'Token ausente, inválido ou expirado.');
 
 function registro(id, usuarioId, nome) {
     return {
@@ -113,13 +118,23 @@ function simularModel() {
 // Carrega apenas os módulos fornecidos para cada arquivo, inclusive quando o código de produção muda.
 function carregarIsolado(arquivo, dependencias, consoleLocal = console) {
     const caminho = join(__dirname, '..', arquivo);
-    const executar = compileFunction(readFileSync(caminho, 'utf8'), ['require', 'module', 'console'], { filename: caminho });
+    const executar = compileFunction(
+        readFileSync(caminho, 'utf8'),
+        ['require', 'module', 'console', 'process'],
+        { filename: caminho }
+    );
     const modulo = { exports: {} };
     executar((nome) => {
         assert.ok(Object.hasOwn(dependencias, nome), 'Dependência indisponível no teste: ' + nome);
         return dependencias[nome];
-    }, modulo, consoleLocal);
+    }, modulo, consoleLocal, { env: { JWT_SECRET: CHAVE_JWT_TESTE } });
     return modulo.exports;
+}
+
+const protegerRota = carregarIsolado('middleware/auth.js', { 'express-jwt': require('express-jwt') });
+
+function emitirToken(id, { chave = CHAVE_JWT_TESTE, validade = '1h' } = {}) {
+    return jwt.sign({ id }, chave, { algorithm: 'HS256', expiresIn: validade });
 }
 
 function carregarRouter(model) {
@@ -153,8 +168,9 @@ function montarServidorPrincipal(router) {
         express: criarExpress,
         dotenv: { config() {} },
         './utils/erros': ErroHttp,
-        './middleware/authMock': () => assert.fail('O CRUD não deve executar authMock.'),
+        './middleware/auth': protegerRota,
         './routes/auth': express.Router(),
+        './routes/categorias': express.Router(),
         './routes/lancamentos': express.Router(),
         './routes/relatorios': express.Router(),
         './routes/fontesDestinos': router
@@ -164,7 +180,7 @@ function montarServidorPrincipal(router) {
     return { app, tratarErros, errosRegistrados };
 }
 
-async function iniciarHttp(t, app) {
+async function iniciarHttp(t, app, identidadeSimulada) {
     const servidor = createServer(app);
     t.after(async () => {
         if (!servidor.listening) return;
@@ -177,13 +193,14 @@ async function iniciarHttp(t, app) {
     const escutando = once(servidor, 'listening');
     servidor.listen(0, '127.0.0.1');
     await escutando;
-    const url = 'http://127.0.0.1:' + servidor.address().port + '/fontes-destinos';
+    const origem = 'http://127.0.0.1:' + servidor.address().port;
 
-    return async (metodo, caminho = '', { usuario = USUARIO, dados } = {}) => {
+    return async (metodo, caminho = '', { usuario = USUARIO, dados, token, rota = ROTA } = {}) => {
         const headers = {};
-        if (usuario !== null) headers['x-usuario-teste'] = String(usuario);
+        if (identidadeSimulada && usuario !== null) headers['x-usuario-teste'] = String(usuario);
+        if (token !== undefined) headers.authorization = 'Bearer ' + token;
         if (dados !== undefined) headers['content-type'] = 'application/json';
-        const resposta = await fetch(url + caminho, {
+        const resposta = await fetch(origem + rota + caminho, {
             method: metodo,
             headers,
             body: JSON.stringify(dados),
@@ -194,19 +211,24 @@ async function iniciarHttp(t, app) {
     };
 }
 
-async function preparar(t) {
-    const { model, chamadas } = simularModel();
-    const router = carregarRouter(model);
-    const { tratarErros, errosRegistrados } = montarServidorPrincipal(router);
+function montarRouterIsolado(router, tratarErros) {
     const app = express();
     app.use(express.json());
-    app.use('/fontes-destinos', (req, _res, next) => {
+    app.use(ROTA, (req, _res, next) => {
         const id = req.get('x-usuario-teste');
         if (id !== undefined) req.auth = { id };
         next();
     }, router);
     app.use(tratarErros);
-    const http = await iniciarHttp(t, app);
+    return app;
+}
+
+async function preparar(t, { servidorPrincipal = false } = {}) {
+    const { model, chamadas } = simularModel();
+    const router = carregarRouter(model);
+    const { app, tratarErros, errosRegistrados } = montarServidorPrincipal(router);
+    const aplicativo = servidorPrincipal ? app : montarRouterIsolado(router, tratarErros);
+    const http = await iniciarHttp(t, aplicativo, !servidorPrincipal);
     return { http, chamadas, model, errosRegistrados };
 }
 
@@ -355,15 +377,92 @@ test('um erro assíncrono inesperado chega ao middleware global e retorna 500 ge
     assert.deepEqual(errosRegistrados, [erroInterno]);
 });
 
-test('a montagem do servidor principal bloqueia os cinco endpoints sem chamar o model', async (t) => {
-    const { model, chamadas } = simularModel();
-    const { app } = montarServidorPrincipal(carregarRouter(model));
-    const http = await iniciarHttp(t, app);
-    const esperado = erroEsperado(401, 'Autenticação JWT indisponível para fontes e destinos.');
-    assert.deepEqual(await http('POST', '', { dados: DADOS_VALIDOS }), esperado);
-    assert.deepEqual(await http('GET'), esperado);
-    assert.deepEqual(await http('GET', '/11'), esperado);
-    assert.deepEqual(await http('PUT', '/11', { dados: { nome: 'Conta atualizada' } }), esperado);
-    assert.deepEqual(await http('DELETE', '/11'), esperado);
+test('o JWT rejeita os cinco endpoints com token ausente, inválido, mal assinado ou expirado', async (t) => {
+    const { http, chamadas } = await preparar(t, { servidorPrincipal: true });
+    const casos = [
+        ['ausente', undefined],
+        ['inválido', 'token-invalido'],
+        ['assinatura incorreta', emitirToken(USUARIO, { chave: randomBytes(32).toString('hex') })],
+        ['expirado', emitirToken(USUARIO, { validade: -1 })]
+    ];
+    const operacoes = [
+        ['POST', '', DADOS_VALIDOS],
+        ['GET', ''],
+        ['GET', '/11'],
+        ['PUT', '/11', { nome: 'Conta atualizada' }],
+        ['DELETE', '/11']
+    ];
+
+    for (const [caso, token] of casos) {
+        for (const [metodo, caminho, dados] of operacoes) {
+            const resposta = await http(metodo, caminho, { token, dados });
+            assert.deepEqual(resposta, JWT_REJEITADO, `${metodo} ${ROTA}${caminho} com token ${caso}`);
+        }
+    }
     assert.deepEqual(chamadas, []);
+});
+
+test('um JWT válido libera as cinco operações do CRUD na montagem do servidor', async (t) => {
+    const { http, chamadas } = await preparar(t, { servidorPrincipal: true });
+    const token = emitirToken(USUARIO);
+    const novaConta = registro(34, USUARIO, 'Reserva');
+    const alteracoes = { nome: 'Conta editada' };
+
+    assert.deepEqual(await http('POST', '', { token, dados: DADOS_VALIDOS }),
+        respostaEsperada(201, { dados: novaConta }));
+    assert.deepEqual(await http('GET', '', { token }),
+        respostaEsperada(200, { dados: [CONTA, CONTA_VINCULADA, novaConta] }));
+    assert.deepEqual(await http('GET', '/11', { token }), respostaEsperada(200, { dados: CONTA }));
+    assert.deepEqual(await http('PUT', '/11', { token, dados: alteracoes }),
+        respostaEsperada(200, { dados: { ...CONTA, ...alteracoes } }));
+    assert.deepEqual(await http('DELETE', '/11', { token }), respostaEsperada(204, undefined));
+    assert.deepEqual(chamadas, [
+        ['criar', USUARIO, DADOS_VALIDOS],
+        ['listar', USUARIO],
+        ['buscarPorId', USUARIO, '11'],
+        ['atualizar', USUARIO, '11', alteracoes],
+        ['excluir', USUARIO, '11']
+    ]);
+});
+
+test('a montagem usa a identidade de cada JWT mesmo com usuario_id no body ou na query', async (t) => {
+    const { http, chamadas } = await preparar(t, { servidorPrincipal: true });
+    const token = emitirToken(USUARIO);
+    const outroToken = emitirToken(OUTRO_USUARIO);
+    const query = '?usuario_id=' + OUTRO_USUARIO;
+    const dados = { ...DADOS_VALIDOS, usuario_id: OUTRO_USUARIO };
+
+    assert.deepEqual(await http('POST', query, { dados }), JWT_REJEITADO);
+    assert.deepEqual(chamadas, []);
+    assert.deepEqual(await http('POST', query, { token, dados }), erroEsperado(400, 'Campos inválidos.'));
+    assert.deepEqual(await http('PUT', '/11' + query, { token, dados }), erroEsperado(400, 'Campos inválidos.'));
+    assert.deepEqual(await http('GET', query, { token }),
+        respostaEsperada(200, { dados: [CONTA, CONTA_VINCULADA] }));
+    assert.deepEqual(await http('GET', '?usuario_id=' + USUARIO, { token: outroToken }),
+        respostaEsperada(200, { dados: [CONTA_ALHEIA] }));
+    assert.deepEqual(chamadas, [
+        ['criar', USUARIO, dados],
+        ['atualizar', USUARIO, '11', dados],
+        ['listar', USUARIO],
+        ['listar', OUTRO_USUARIO]
+    ]);
+});
+
+test('o JWT protege o CRUD em GET e HEAD com maiúsculas e barra final', async (t) => {
+    const { http, chamadas } = await preparar(t, { servidorPrincipal: true });
+    const token = emitirToken(USUARIO);
+    const variantes = [ROTA, ROTA + '/', '/FONTES-DESTINOS', '/Fontes-Destinos/'];
+
+    for (const rota of variantes) {
+        assert.deepEqual(await http('GET', '', { rota }), JWT_REJEITADO, rota);
+        assert.deepEqual(await http('HEAD', '', { rota }), respostaEsperada(401, undefined), rota);
+    }
+    assert.deepEqual(chamadas, []);
+
+    for (const rota of variantes) {
+        assert.deepEqual(await http('GET', '', { rota, token }),
+            respostaEsperada(200, { dados: [CONTA, CONTA_VINCULADA] }), rota);
+        assert.deepEqual(await http('HEAD', '', { rota, token }), respostaEsperada(200, undefined), rota);
+    }
+    assert.deepEqual(chamadas, variantes.flatMap(() => [['listar', USUARIO], ['listar', USUARIO]]));
 });

@@ -2,24 +2,9 @@ const express = require('express');
 const router = express.Router();
 
 const Relatorio = require('../models/Relatorio');
+const RelatorioCategoria = require('../models/RelatorioCategoria');
 const ErroHttp = require('../utils/erros');
-<<<<<<< HEAD
-const { validarPeriodo } = require('../utils/validacoes');
-
-router.get('/categorias', async (req, res) => {
-    const { inicio, fim } = validarPeriodo(req.query);
-    const resultado = await Relatorio.categorias(req.auth.id, inicio, fim);
-    return res.status(200).json(resultado);
-});
-
-router.get('/fontes-destinos', async (req, res) => {
-    const { inicio, fim } = validarPeriodo(req.query);
-    const resultado = await Relatorio.fontesDestinos(req.auth.id, inicio, fim);
-    return res.status(200).json(resultado);
-});
-=======
 const { dataValida } = require('../utils/datas');
->>>>>>> origin/feat/fontes-destinos-joao
 
 router.get('/faturas', async (req, res) => {
     let meses = 3;
@@ -37,9 +22,6 @@ router.get('/faturas', async (req, res) => {
     return res.status(200).json(resultado);
 });
 
-<<<<<<< HEAD
-const RelatorioCategoria = require('../models/RelatorioCategoria');
-=======
 router.get('/fontes-destinos', async (req, res) => {
     const id = req.auth?.id;
     const usuarioId = typeof id === 'string' && /^\d+$/.test(id) ? Number(id) : id;
@@ -66,10 +48,6 @@ router.get('/fontes-destinos', async (req, res) => {
     const resultado = await Relatorio.fontesDestinos(usuarioId, inicio, fim);
     return res.status(200).json(resultado);
 });
-
-// TODO (colegas): GET /relatorios/categorias (RF7)
-// entra neste mesmo Router, com o método correspondente em models/Relatorio.js.
->>>>>>> origin/feat/fontes-destinos-joao
 
 const DIA_EM_MS = 24 * 60 * 60 * 1000;
 

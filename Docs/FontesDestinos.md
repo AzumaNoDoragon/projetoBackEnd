@@ -8,7 +8,7 @@ A API usa Node.js, CommonJS e Express. Os routers verificam a identidade, aplica
 
 ## 2. CRUD de fontes e destinos
 
-Os exemplos desta seção usam dados fictícios e representam o uso **após a integração do JWT definitivo**. Substitua `TOKEN_EXEMPLO` pelo token recebido da autenticação real.
+Os exemplos desta seção usam dados fictícios. Substitua `TOKEN_EXEMPLO` pelo JWT recebido no login.
 
 | Método e caminho | Resultado de sucesso |
 | --- | --- |
@@ -176,7 +176,7 @@ A resposta `204 No Content` tem corpo vazio.
 | Código HTTP | Situação |
 | --- | --- |
 | `400 Bad Request` | Corpo, campos ou ID inválidos. O parser do servidor também retorna `400` para JSON malformado. |
-| `401 Unauthorized` | Bloqueio temporário no servidor ou identidade ausente ou inválida no router. |
+| `401 Unauthorized` | Token ausente, inválido ou expirado, ou identidade inválida no router. |
 | `404 Not Found` | ID inexistente ou de outro usuário em uma consulta, atualização ou exclusão. |
 | `409 Conflict` | Nome duplicado para o usuário, vínculo que impede a exclusão ou a mudança de tipo, ou referência indisponível no banco. |
 | `500 Internal Server Error` | Falha interna, com mensagem genérica para o cliente. |
@@ -193,7 +193,7 @@ O router converte os erros de domínio em `ErroHttp`. O middleware global retorn
 
 `GET /relatorios/fontes-destinos` exige os parâmetros de query `inicio` e `fim`. Cada parâmetro deve aparecer uma vez e conter uma data real no formato `AAAA-MM-DD`, de `1000-01-01` a `9999-12-31`. O período inclui as duas datas e aceita `inicio` igual a `fim`. Datas inexistentes, parâmetros repetidos, arrays, valores ausentes ou ordem invertida retornam `400 Bad Request` com `campos.periodo`. A validação ocorre antes de chamar o model.
 
-Este exemplo autenticado aplica-se **após a integração do JWT definitivo**.
+Substitua `TOKEN_EXEMPLO` pelo JWT recebido no login.
 
 ```bash
 curl 'http://localhost:3000/relatorios/fontes-destinos?inicio=2026-11-01&fim=2026-11-30' \
@@ -229,7 +229,7 @@ Resposta `200 OK` com dados fictícios
 - Cada parcela conta uma vez pelo valor e pela data registrados na própria linha de lançamento. O cálculo considera somente as parcelas do período e é independente da previsão de faturas.
 - A consulta usa `LEFT JOIN` com os filtros de usuário e data na associação aos lançamentos, preserva as contas sem movimento e agrupa por fonte ou destino. Cada lista segue a ordem por nome e ID. Movimentações vinculadas a partir de outro usuário ficam fora da soma.
 
-As três listas são arrays e podem vir vazias com `200 OK`. Um usuário sem fontes ou destinos recebe arrays vazios em `entradas`, `saidas` e `contas`. O RF8 devolve `401` enquanto estiver bloqueado no servidor ou quando a identidade estiver ausente ou for inválida. Erros inesperados retornam `500` com mensagem genérica. [Router de relatórios](../routes/relatorios.js) · [Model de relatórios](../models/Relatorio.js) · [Validação de datas](../utils/datas.js)
+As três listas são arrays e podem vir vazias com `200 OK`. Um usuário sem fontes ou destinos recebe arrays vazios em `entradas`, `saidas` e `contas`. O RF8 devolve `401` quando o token está ausente, é inválido ou está expirado, ou quando a identidade é inválida. Erros inesperados retornam `500` com mensagem genérica. [Router de relatórios](../routes/relatorios.js) · [Model de relatórios](../models/Relatorio.js) · [Validação de datas](../utils/datas.js)
 
 ## 4. Autenticação e segurança
 
@@ -237,33 +237,26 @@ O CRUD e o RF8 obtêm o usuário exclusivamente de `req.auth.id`. Os routers ace
 
 Os models vinculam os valores das consultas com parâmetros `?`. O CRUD filtra as leituras, atualizações e exclusões pelo `usuario_id` e grava o proprietário com o ID autenticado. Um ID de outro usuário recebe o mesmo `404` de um ID inexistente. O RF8 restringe tanto as fontes e destinos quanto os lançamentos à identidade informada, inclusive quando um lançamento referencia uma fonte de outro usuário. [Model do CRUD](../models/FonteDestino.js) · [Model de relatórios](../models/Relatorio.js)
 
-O `authMock` em uso na montagem geral de `/relatorios` atribui `req.auth.id = 2` a toda requisição que recebe e dispensa a validação de token. A equipe ainda precisa integrar o JWT definitivo para liberar os endpoints desta documentação. O servidor contém dois bloqueios temporários. [Middleware temporário](../middleware/authMock.js) · [Montagem do servidor](../server.js)
-
-| Montagem em `server.js` | Comportamento atual |
-| --- | --- |
-| `/fontes-destinos` | O bloqueio retorna `401` antes de executar o router da Issue #12. |
-| `/relatorios/fontes-destinos` | A montagem específica retorna `401` antes da montagem geral de `/relatorios` e, portanto, antes do `authMock`. O bloqueio cobre as variantes aceitas pelo Express com maiúsculas, barra final e `HEAD`. |
-
-### Integração futura do JWT
-
-1. Use o middleware JWT da equipe na montagem de `/fontes-destinos` no lugar do bloqueio atual. O middleware deve validar a assinatura e a expiração do token e preencher `req.auth.id` com a identidade verificada antes de chamar o router.
-2. Substitua o `authMock` pelo middleware JWT real na montagem geral de `/relatorios`. Remova o bloqueio específico de `/relatorios/fontes-destinos` somente depois que essa montagem estiver protegida.
+Os bloqueios temporários foram removidos. O servidor aplica `protegerRota` às montagens de `/fontes-destinos` e `/relatorios`, incluindo o RF8. O login em `POST /auth/login` emite um JWT HS256 com o campo `id`. O middleware verifica a assinatura e a expiração do token e disponibiliza a identidade em `req.auth.id` antes de executar o router. [Login](../routes/auth.js) · [Middleware JWT](../middleware/auth.js) · [Montagem do servidor](../server.js)
 
 ## 5. Testes automatizados
 
-| Suíte | Cobertura | Aprovados |
+| Suíte | Cobertura | Aprovados no backup |
 | --- | --- | ---: |
 | [`testes/fontesDestinos.integracao.test.js`](../testes/fontesDestinos.integracao.test.js) | CRUD real no MySQL, incluindo validações, isolamento, duplicidade e vínculos. | 9 |
-| [`testes/fontesDestinos.rotas.test.js`](../testes/fontesDestinos.rotas.test.js) | Contrato HTTP do CRUD e bloqueio dos cinco endpoints na montagem do servidor. | 19 |
+| [`testes/fontesDestinos.rotas.test.js`](../testes/fontesDestinos.rotas.test.js) | Contrato HTTP do CRUD e autenticação JWT dos cinco endpoints na montagem do servidor. | 22 |
 | [`testes/relatorioFontesDestinos.integracao.test.js`](../testes/relatorioFontesDestinos.integracao.test.js) | RF8 real no MySQL, incluindo agregação, datas de fronteira, vínculos cruzados, valores monetários, parcelas e preservação dos registros. | 20 |
-| [`testes/relatorioFontesDestinos.rotas.test.js`](../testes/relatorioFontesDestinos.rotas.test.js) | Identidade, validação do período, formato do JSON, erros HTTP, bloqueio do RF8 e funcionamento da montagem de faturas. | 26 |
-| **Total nas execuções individuais** | **Nenhuma falha registrada** | **74** |
+| [`testes/relatorioFontesDestinos.rotas.test.js`](../testes/relatorioFontesDestinos.rotas.test.js) | Identidade, validação do período, formato do JSON, erros HTTP e autenticação JWT do RF8, de faturas e de categorias. | 28 |
+| [`testes/fontesDestinos.e2e.test.js`](../testes/fontesDestinos.e2e.test.js) | Cadastro, login, CRUD, lançamentos e RF8 com JWT e MySQL reais no mesmo fluxo. | 5 |
+| **Total na versão de segurança** | **Nenhuma falha registrada** | **84** |
 
-As contagens registram as execuções individuais já realizadas. Nas suítes de integração, o total do `node:test` inclui o teste pai que prepara e encerra os subtestes.
+As contagens registram a validação da versão de segurança `backup/fontes-destinos-integracao` no commit `cade3f9`. Nas suítes de integração e no E2E, o total do `node:test` inclui o teste pai que prepara e encerra os subtestes.
 
 As suítes de integração usam os models e o pool reais, com uma conexão auxiliar para preparar e limpar os dados. Conferem `DB_NAME` e executam `SELECT DATABASE()` no pool e na conexão auxiliar antes de inserir. Criam registros exclusivos de cada execução e limpam apenas os registros inseridos, na ordem lançamentos, fontes e destinos, categorias e usuários. O pool e a conexão auxiliar são encerrados ao final.
 
-As suítes HTTP fazem requisições reais em uma aplicação Express de teste em `127.0.0.1` com porta dinâmica. Exercitam os routers e o middleware de erros com models e identidade simulados. Para verificar a montagem em `server.js`, elas substituem as dependências e interceptam `listen`. Esses testes dispensam MySQL, credenciais e a inicialização do servidor principal.
+As suítes HTTP fazem requisições reais em uma aplicação Express de teste em `127.0.0.1` com porta dinâmica. Exercitam os routers e o middleware de erros com models simulados. Nos testes de montagem em `server.js`, interceptam `listen` e usam o middleware JWT real com chave sintética. Esses testes dispensam MySQL e a inicialização do servidor principal.
+
+O E2E inicia a API real em `127.0.0.1` com porta dinâmica e emite os tokens pelo login com uma chave JWT sintética. Confirma `financas_teste` antes de iniciar a API, cadastra usuários exclusivos da execução, limpa seus dados e encerra o servidor e as conexões ao final.
 
 ### Preparação segura de `financas_teste`
 
@@ -287,6 +280,7 @@ DOTENV_OVERRIDE=false DB_NAME=financas_teste node --test testes/fontesDestinos.i
 node --test testes/fontesDestinos.rotas.test.js
 DOTENV_OVERRIDE=false DB_NAME=financas_teste node --test testes/relatorioFontesDestinos.integracao.test.js
 node --test testes/relatorioFontesDestinos.rotas.test.js
+DOTENV_OVERRIDE=false DB_NAME=financas_teste node --test --test-concurrency=1 testes/fontesDestinos.e2e.test.js
 ```
 
 ## 6. Arquivos e responsabilidades
@@ -296,14 +290,12 @@ node --test testes/relatorioFontesDestinos.rotas.test.js
 | [`models/FonteDestino.js`](../models/FonteDestino.js) | Issue #12. Valida, persiste e consulta fontes e destinos do usuário e traduz conflitos do banco. |
 | [`routes/fontesDestinos.js`](../routes/fontesDestinos.js) | Issue #12. Identifica o usuário em `req.auth.id` e implementa o contrato HTTP do CRUD. |
 | [`models/Relatorio.js`](../models/Relatorio.js) | Issue #13. O método `fontesDestinos` agrega o RF8. O método `faturas` atende ao relatório de faturas existente. |
-| [`routes/relatorios.js`](../routes/relatorios.js) | Issue #13. A rota `/fontes-destinos` valida o período e chama o model. O mesmo router contém `/faturas`. |
-| [`server.js`](../server.js) | Monta o CRUD e os relatórios, aplica os bloqueios temporários e formata as respostas de erro. |
+| [`routes/relatorios.js`](../routes/relatorios.js) | Issue #13. A rota `/fontes-destinos` valida o período e chama o model. O mesmo router contém `/faturas` e `/categorias`. |
+| [`server.js`](../server.js) | Monta o CRUD e os relatórios com proteção JWT e formata as respostas de erro. |
 | [`testes/fontesDestinos.integracao.test.js`](../testes/fontesDestinos.integracao.test.js) e [`testes/fontesDestinos.rotas.test.js`](../testes/fontesDestinos.rotas.test.js) | Verificam o model e o contrato HTTP da Issue #12. |
 | [`testes/relatorioFontesDestinos.integracao.test.js`](../testes/relatorioFontesDestinos.integracao.test.js) e [`testes/relatorioFontesDestinos.rotas.test.js`](../testes/relatorioFontesDestinos.rotas.test.js) | Verificam a agregação real e o contrato HTTP do RF8 da Issue #13. |
+| [`testes/fontesDestinos.e2e.test.js`](../testes/fontesDestinos.e2e.test.js) | Verifica as Issues #12 e #13 pela API real com JWT e MySQL. |
 
 ## 7. Limitações e pendências
 
-- Integrar o JWT definitivo antes de liberar o CRUD e o RF8 no servidor principal.
-- Exercitar o fluxo de ponta a ponta com autenticação real, servidor e banco na mesma execução. As suítes atuais cobrem o MySQL e o contrato HTTP em execuções separadas.
 - Os cálculos do RF8 usam valores `DECIMAL` no MySQL. Totais muito grandes podem perder precisão nos centavos ao serem convertidos para `Number` para compor o JSON. O `limite` do CRUD permanece como string decimal.
-- Após a integração do JWT, revisar e executar novamente os testes de montagem que hoje esperam `401` incondicional. Verificar que tokens ausentes, inválidos ou expirados recebem `401`, que tokens válidos liberam o acesso e que o isolamento entre usuários permanece.
