@@ -2,13 +2,14 @@ require('dotenv').config();
 const express = require('express')
 const ErroHttp = require('./utils/erros');
 
-const protegerRota = require('./middleware/authMock');
+const protegerRota = require('./middleware/auth');
 
 const server = express()
 server.use(express.json())
 
 
 server.use('/auth', require('./routes/auth'))
+server.use('/categorias', protegerRota, require('./routes/categorias'))
 server.use('/lancamentos', protegerRota, require('./routes/lancamentos'))
 server.use('/relatorios', protegerRota, require('./routes/relatorios'));
 
