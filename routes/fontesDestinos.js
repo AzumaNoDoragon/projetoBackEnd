@@ -1,10 +1,10 @@
 const express = require('express');
 const FonteDestino = require('../models/FonteDestino');
+const ErroHttp = require('../utils/erros');
 
 const router = express.Router();
 
-// No server.js, monte este router após o middleware JWT real, que define req.auth.id,
-// e após express.json(). Esta verificação de identidade não valida tokens JWT.
+// O middleware JWT deve preencher req.auth.id antes de executar estas rotas.
 function executar(operacao) {
     return async (req, res) => {
         const usuarioId = req.auth?.id;
@@ -13,22 +13,16 @@ function executar(operacao) {
         const id = formatoValido ? Number(usuarioId) : NaN;
 
         if (!Number.isSafeInteger(id) || id < 1 || id > 2147483647) {
-            return res.status(401).json({
-                erro: { codigo: 'NAO_AUTENTICADO', mensagem: 'Autenticação necessária ou identidade inválida.' }
-            });
+            throw new ErroHttp(401, 'Autenticação necessária ou identidade inválida.');
         }
 
         try {
             return await operacao(req, res, id);
         } catch (erro) {
             if (erro instanceof FonteDestino.ErroFonteDestino) {
-                return res.status(erro.status).json({
-                    erro: { codigo: erro.codigo, mensagem: erro.message }
-                });
+                throw new ErroHttp(erro.status, erro.message);
             }
-            return res.status(500).json({
-                erro: { codigo: 'ERRO_INTERNO', mensagem: 'Não foi possível concluir a operação.' }
-            });
+            throw erro;
         }
     };
 }
