@@ -4,52 +4,11 @@ const { hojeISO, periodoAnterior } = require('../utils/datas');
 
 const emCentavos = (valor) => Math.round(Number(valor) * 100);
 const emReais = (centavos) => centavos / 100;
-const arredondar = (n) => Math.round(n * 100) / 100;
 
 class Relatorio {
     async categorias(usuarioId, inicio, fim) {
         const anterior = periodoAnterior(inicio, fim);
-
-        const [linhas] = await pool.query(
-            `SELECT c.id, c.nome, l.tipo,
-                    SUM(CASE WHEN l.data BETWEEN ? AND ? THEN l.valor ELSE 0 END) AS total,
-                    SUM(CASE WHEN l.data BETWEEN ? AND ? THEN l.valor ELSE 0 END) AS anterior
-             FROM lancamentos l
-             JOIN categorias c ON c.id = l.categoria_id
-             WHERE l.usuario_id = ? AND l.data BETWEEN ? AND ?
-             GROUP BY c.id, c.nome, l.tipo`,
-            [inicio, fim, anterior.inicio, anterior.fim, usuarioId, anterior.inicio, fim]
-        );
-
-        const montar = (tipo) => {
-            const itens = linhas
-                .filter((l) => l.tipo === tipo)
-                .map((l) => ({ id: l.id, nome: l.nome, total: emCentavos(l.total), anterior: emCentavos(l.anterior) }))
-                .filter((l) => l.total > 0 || l.anterior > 0)
-                .sort((a, b) => b.total - a.total || a.nome.localeCompare(b.nome));
-
-            const totalGeral = itens.reduce((soma, l) => soma + l.total, 0);
-
-            return {
-                total: emReais(totalGeral),
-                categorias: itens.map((l) => ({
-                    id: l.id,
-                    nome: l.nome,
-                    total: emReais(l.total),
-                    percentual: totalGeral > 0 ? arredondar((l.total / totalGeral) * 100) : 0,
-                    anterior: emReais(l.anterior),
-                    // sem base de comparação (período anterior zerado), a variação não existe
-                    variacao: l.anterior > 0 ? arredondar(((l.total - l.anterior) / l.anterior) * 100) : null
-                }))
-            };
-        };
-
-        return {
-            periodo: { inicio, fim },
-            periodoAnterior: anterior,
-            saidas: montar('saida'),
-            entradas: montar('entrada')
-        };
+        return require('./RelatorioCategoria').gerar(usuarioId, inicio, fim, anterior.inicio, anterior.fim);
     }
 
     async faturas(usuarioId, meses, hoje = hojeISO()) {

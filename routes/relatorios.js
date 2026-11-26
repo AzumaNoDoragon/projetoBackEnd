@@ -4,7 +4,7 @@ const router = express.Router();
 const Relatorio = require('../models/Relatorio');
 const RelatorioCategoria = require('../models/RelatorioCategoria');
 const ErroHttp = require('../utils/erros');
-const { dataValida } = require('../utils/datas');
+const { dataValida, periodoAnterior } = require('../utils/datas');
 
 router.get('/faturas', async (req, res) => {
     let meses = 3;
@@ -49,8 +49,6 @@ router.get('/fontes-destinos', async (req, res) => {
     return res.status(200).json(resultado);
 });
 
-const DIA_EM_MS = 24 * 60 * 60 * 1000;
-
 function converterData(texto) {
     if (typeof texto !== 'string' ||
         !/^[1-9]\d{3}-\d{2}-\d{2}$/.test(texto)) {
@@ -92,18 +90,8 @@ router.get('/categorias', async (req, res, next) => {
         });
     }
 
-    // Inclui tanto o primeiro quanto o último dia.
-    const quantidadeDias = (dataFim - dataInicio) / DIA_EM_MS + 1;
-
-    const dataFimAnterior = new Date(
-        dataInicio.getTime() - DIA_EM_MS
-    );
-
-    const dataInicioAnterior = new Date(
-        dataInicio.getTime() - quantidadeDias * DIA_EM_MS
-    );
-
-    if (dataInicioAnterior.getUTCFullYear() < 1000) {
+    const anterior = periodoAnterior(inicio, fim);
+    if (anterior.inicio < '1000-01-01') {
         return res.status(400).json({
             erro: 'dados inválidos.',
             campos: {
@@ -112,8 +100,7 @@ router.get('/categorias', async (req, res, next) => {
         });
     }
 
-    const inicioAnterior = dataInicioAnterior.toISOString().slice(0, 10);
-    const fimAnterior = dataFimAnterior.toISOString().slice(0, 10);
+    const { inicio: inicioAnterior, fim: fimAnterior } = anterior;
 
     try {
         const relatorio = await RelatorioCategoria.gerar(

@@ -240,4 +240,13 @@ async function excluir(usuarioId, id) {
 }
 
 // Operações assíncronas rejeitam com ErroFonteDestino; validarDados é síncrona.
-module.exports = { criar, listar, buscarPorId, atualizar, excluir, validarDados, ErroFonteDestino };
+class FonteDestino {
+    criar(...args) { return criar(...args); }
+    listar(...args) { return listar(...args); }
+    buscarPorId(...args) { return buscarPorId(...args); }
+    atualizar(...args) { return atualizar(...args); }
+    excluir(...args) { return excluir(...args); }
+    validarDados(dados) { return validarDados(dados); }
+}
+
+module.exports = Object.assign(new FonteDestino(), { ErroFonteDestino });
