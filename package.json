@@ -10,7 +10,8 @@
     "db:init": "node database/init.js",
     "db:seed": "node database/seed.js",
     "test:integracao": "node testes/executar-integracao.cjs",
-    "db:seed:gerar": "node database/seed.js --gerar"
+    "db:seed:gerar": "node database/seed.js --gerar",
+    "test:rotas": "node testes/smoke.js"
   },
   "repository": {
     "type": "git",
