@@ -1,4 +1,6 @@
 const { pool } = require('../database/connection');
+const ErroHttp = require('../utils/erros');
+const { emTransacao } = require('../utils/transacao');
 
 class Categoria {
     async listar(usuarioId, tipo) {
@@ -43,14 +45,29 @@ class Categoria {
     }
 
     async atualizar(id, usuarioId, { nome, tipo }) {
-        const [resultado] = await pool.execute(
-            `UPDATE categorias
-             SET nome = ?, tipo = ?
-             WHERE id = ? AND usuario_id = ?`,
-            [nome, tipo, id, usuarioId]
-        );
-
-        return resultado.affectedRows;
+        return emTransacao(async (banco) => {
+            const [categorias] = await banco.execute(
+                'SELECT id, tipo FROM categorias WHERE id = ? AND usuario_id = ? FOR UPDATE',
+                [id, usuarioId]
+            );
+            if (!categorias.length) return 0;
+            if (categorias[0].tipo !== tipo) {
+                const [vinculados] = await banco.execute(
+                    `SELECT id FROM lancamentos
+                     WHERE categoria_id = ? AND usuario_id = ? AND tipo <> ? LIMIT 1 FOR UPDATE`,
+                    [id, usuarioId, tipo]
+                );
+                if (vinculados.length) {
+                    throw new ErroHttp(409, 'Não é possível alterar o tipo da categoria: há lançamentos incompatíveis vinculados.');
+                }
+            }
+            await banco.execute(
+                `UPDATE categorias SET nome = ?, tipo = ? WHERE id = ? AND usuario_id = ?`,
+                [nome, tipo, id, usuarioId]
+            );
+            // A existência foi confirmada sob bloqueio, inclusive para edições sem mudanças.
+            return 1;
+        });
     }
 
     async excluir(id, usuarioId) {

@@ -1,6 +1,7 @@
 const { randomUUID } = require('crypto');
 const { pool } = require('../database/connection');
 const ErroHttp = require('../utils/erros');
+const { emTransacao } = require('../utils/transacao');
 const { dividirEmParcelas } = require('../utils/parcelas');
 const { dataValida, mesCorrente } = require('../utils/datas');
 const { idValido } = require('../utils/validacoes');
@@ -34,9 +35,18 @@ function formatar(l) {
     };
 }
 
-async function validarVinculos(usuarioId, tipo, categoriaId, fonteDestinoId) {
-    const [categorias] = await pool.query(
-        'SELECT id, tipo FROM categorias WHERE id = ? AND usuario_id = ?',
+async function validarVinculos(banco, usuarioId, tipo, categoriaId, fonteDestinoId) {
+    // Ordem comum a criação/edição: fonte, categoria, lançamento.
+    // Os bloqueios coordenam as mudanças de tipo nos dois cadastros.
+    const [fontes] = await banco.query(
+        'SELECT id, tipo FROM fontes_destinos WHERE id = ? AND usuario_id = ? FOR UPDATE',
+        [fonteDestinoId, usuarioId]
+    );
+    if (fontes.length === 0) {
+        throw new ErroHttp(404, 'Fonte/destino não encontrada.');
+    }
+    const [categorias] = await banco.query(
+        'SELECT id, tipo FROM categorias WHERE id = ? AND usuario_id = ? FOR UPDATE',
         [categoriaId, usuarioId]
     );
     if (categorias.length === 0) {
@@ -48,45 +58,42 @@ async function validarVinculos(usuarioId, tipo, categoriaId, fonteDestinoId) {
         });
     }
 
-    const [fontes] = await pool.query(
-        'SELECT id, tipo FROM fontes_destinos WHERE id = ? AND usuario_id = ?',
-        [fonteDestinoId, usuarioId]
-    );
-    if (fontes.length === 0) {
-        throw new ErroHttp(404, 'Fonte/destino não encontrada.');
-    }
-
     return { fonte: fontes[0] };
+}
+
+function validarParcelamento(parcelas, tipo, fonte) {
+    if (parcelas > 1 && (fonte.tipo !== 'cartao_credito' || tipo !== 'saida')) {
+        throw new ErroHttp(400, 'Dados inválidos.', {
+            parcelas: 'Só é possível parcelar saídas em cartão de crédito.'
+        });
+    }
 }
 
 class Lancamentos {
     async create(dados, usuarioId) {
         const { tipo, descricao, valor, data, categoriaId, fonteDestinoId, parcelas } = dados;
 
-        const { fonte } = await validarVinculos(usuarioId, tipo, categoriaId, fonteDestinoId);
+        return emTransacao(async (banco) => {
+            const { fonte } = await validarVinculos(banco, usuarioId, tipo, categoriaId, fonteDestinoId);
+            validarParcelamento(parcelas, tipo, fonte);
 
-        if (parcelas > 1 && (fonte.tipo !== 'cartao_credito' || tipo !== 'saida')) {
-            throw new ErroHttp(400, 'Dados inválidos.', {
-                parcelas: 'Só é possível parcelar saídas em cartão de crédito.'
-            });
-        }
+            const grupo = parcelas > 1 ? randomUUID() : null;
+            const linhas = dividirEmParcelas(valor, parcelas).map((valorParcela, i) => [
+                usuarioId, tipo, descricao, valorParcela, data,
+                categoriaId, fonteDestinoId, i + 1, parcelas, grupo
+            ]);
 
-        const grupo = parcelas > 1 ? randomUUID() : null;
-        const linhas = dividirEmParcelas(valor, parcelas).map((valorParcela, i) => [
-            usuarioId, tipo, descricao, valorParcela, data,
-            categoriaId, fonteDestinoId, i + 1, parcelas, grupo
-        ]);
+            // INSERT de várias linhas: VALUES ? recebe um array de arrays
+            const [resultado] = await banco.query(
+                `INSERT INTO lancamentos
+                    (usuario_id, tipo, descricao, valor, data, categoria_id,
+                     fonte_destino_id, parcela_atual, total_parcelas, grupo_parcelamento)
+                 VALUES ?`,
+                [linhas]
+            );
 
-        // INSERT de várias linhas: VALUES ? recebe um array de arrays
-        const [resultado] = await pool.query(
-            `INSERT INTO lancamentos
-                (usuario_id, tipo, descricao, valor, data, categoria_id,
-                 fonte_destino_id, parcela_atual, total_parcelas, grupo_parcelamento)
-             VALUES ?`,
-            [linhas]
-        );
-
-        return { id: resultado.insertId, parcelas, grupoParcelamento: grupo };
+            return { id: resultado.insertId, parcelas, grupoParcelamento: grupo };
+        });
     }
 
     async read(filtro, usuarioId) {
@@ -176,22 +183,31 @@ class Lancamentos {
     }
 
     async update(id, usuarioId, dados) {
-        const existente = await this.findById(id, usuarioId);
-        if (!existente) {
-            throw new ErroHttp(404, 'Lançamento não encontrado.');
-        }
-
-        const { tipo, descricao, valor, data, categoriaId, fonteDestinoId } = dados;
-        await validarVinculos(usuarioId, tipo, categoriaId, fonteDestinoId);
-
-        await pool.query(
-            `UPDATE lancamentos
-             SET tipo = ?, descricao = ?, valor = ?, data = ?, categoria_id = ?, fonte_destino_id = ?
-             WHERE id = ? AND usuario_id = ?`,
-            [tipo, descricao, valor, data, categoriaId, fonteDestinoId, id, usuarioId]
-        );
-
-        return this.findById(id, usuarioId);
+        return emTransacao(async (banco) => {
+            const { tipo, descricao, valor, data, categoriaId, fonteDestinoId } = dados;
+            // Primeiro preserva o 404 de registros alheios/inexistentes.
+            const [encontrados] = await banco.query(
+                'SELECT id FROM lancamentos WHERE id = ? AND usuario_id = ?', [id, usuarioId]
+            );
+            if (!encontrados.length) throw new ErroHttp(404, 'Lançamento não encontrado.');
+            const { fonte } = await validarVinculos(banco, usuarioId, tipo, categoriaId, fonteDestinoId);
+            const [persistidos] = await banco.query(
+                'SELECT total_parcelas FROM lancamentos WHERE id = ? AND usuario_id = ? FOR UPDATE',
+                [id, usuarioId]
+            );
+            if (!persistidos.length) throw new ErroHttp(404, 'Lançamento não encontrado.');
+            validarParcelamento(persistidos[0].total_parcelas, tipo, fonte);
+            await banco.query(
+                `UPDATE lancamentos
+                 SET tipo = ?, descricao = ?, valor = ?, data = ?, categoria_id = ?, fonte_destino_id = ?
+                 WHERE id = ? AND usuario_id = ?`,
+                [tipo, descricao, valor, data, categoriaId, fonteDestinoId, id, usuarioId]
+            );
+            const [linhas] = await banco.query(
+                `SELECT ${COLUNAS} ${JOINS} WHERE l.id = ? AND l.usuario_id = ?`, [id, usuarioId]
+            );
+            return formatar(linhas[0]);
+        });
     }
 
     async delete(id, usuarioId, todasParcelas) {
