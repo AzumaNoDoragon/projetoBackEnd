@@ -65,4 +65,24 @@ function validarLancamento(corpo, comParcelas = false) {
     };
 }
 
-module.exports = { idValido, validarLancamento };
+function validarPeriodo(query) {
+    const { inicio, fim } = query || {};
+    const erros = {};
+
+    if (inicio === undefined) erros.inicio = 'Informe a data inicial (AAAA-MM-DD).';
+    else if (!dataValida(inicio)) erros.inicio = 'Data inicial inválida. Use o formato AAAA-MM-DD.';
+
+    if (fim === undefined) erros.fim = 'Informe a data final (AAAA-MM-DD).';
+    else if (!dataValida(fim)) erros.fim = 'Data final inválida. Use o formato AAAA-MM-DD.';
+
+    if (Object.keys(erros).length === 0 && inicio > fim) {
+        erros.fim = 'A data final deve ser maior ou igual à data inicial.';
+    }
+
+    if (Object.keys(erros).length > 0) {
+        throw new ErroHttp(400, 'Dados inválidos.', erros);
+    }
+    return { inicio, fim };
+}
+
+module.exports = { idValido, validarLancamento, validarPeriodo };

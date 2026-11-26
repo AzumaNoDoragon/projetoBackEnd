@@ -3,6 +3,19 @@ const router = express.Router();
 
 const Relatorio = require('../models/Relatorio');
 const ErroHttp = require('../utils/erros');
+const { validarPeriodo } = require('../utils/validacoes');
+
+router.get('/categorias', async (req, res) => {
+    const { inicio, fim } = validarPeriodo(req.query);
+    const resultado = await Relatorio.categorias(req.auth.id, inicio, fim);
+    return res.status(200).json(resultado);
+});
+
+router.get('/fontes-destinos', async (req, res) => {
+    const { inicio, fim } = validarPeriodo(req.query);
+    const resultado = await Relatorio.fontesDestinos(req.auth.id, inicio, fim);
+    return res.status(200).json(resultado);
+});
 
 router.get('/faturas', async (req, res) => {
     let meses = 3;
@@ -19,8 +32,5 @@ router.get('/faturas', async (req, res) => {
     const resultado = await Relatorio.faturas(req.auth.id, meses);
     return res.status(200).json(resultado);
 });
-
-// TODO (colegas): GET /relatorios/categorias (RF7) e GET /relatorios/fontes-destinos (RF8)
-// entram neste mesmo Router, com os métodos correspondentes em models/Relatorio.js.
 
 module.exports = router;

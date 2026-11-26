@@ -7,7 +7,6 @@ const protegerRota = require('./middleware/authMock');
 const server = express()
 server.use(express.json())
 
-
 server.use('/auth', require('./routes/auth'))
 server.use('/lancamentos', protegerRota, require('./routes/lancamentos'))
 server.use('/relatorios', protegerRota, require('./routes/relatorios'));

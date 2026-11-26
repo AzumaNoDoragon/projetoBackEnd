@@ -25,4 +25,27 @@ function mesCorrente() {
     };
 }
 
-module.exports = { dataValida, hojeISO, mesCorrente };
+const DIA_MS = 24 * 60 * 60 * 1000;
+const paraUTC = (texto) => {
+    const [a, m, d] = texto.split('-').map(Number);
+    return new Date(Date.UTC(a, m - 1, d));
+};
+const iso = (d) => d.toISOString().slice(0, 10);
+
+function periodoAnterior(inicio, fim) {
+    const i = paraUTC(inicio);
+    const f = paraUTC(fim);
+    const fimAnterior = new Date(i.getTime() - DIA_MS);
+
+    const ultimoDiaDoMesFim = new Date(Date.UTC(f.getUTCFullYear(), f.getUTCMonth() + 1, 0)).getUTCDate();
+    if (i.getUTCDate() === 1 && f.getUTCDate() === ultimoDiaDoMesFim) {
+        const n = (f.getUTCFullYear() - i.getUTCFullYear()) * 12 + f.getUTCMonth() - i.getUTCMonth() + 1;
+        const inicioAnterior = new Date(Date.UTC(i.getUTCFullYear(), i.getUTCMonth() - n, 1));
+        return { inicio: iso(inicioAnterior), fim: iso(fimAnterior) };
+    }
+
+    const dias = Math.round((f - i) / DIA_MS) + 1;
+    return { inicio: iso(new Date(i.getTime() - dias * DIA_MS)), fim: iso(fimAnterior) };
+}
+
+module.exports = { dataValida, hojeISO, mesCorrente, periodoAnterior };
