@@ -4,8 +4,7 @@
  *
  * financas_teste deve existir com as tabelas do schema. Configure DB_HOST,
  * DB_PORT, DB_USER e DB_PASSWORD no ambiente ou no .env.
- * Evite usar o db:init atual para preparar o banco isolado. O arquivo
- * database/schema.sql contém CREATE DATABASE e USE com o nome fixo financas.
+ * Prepare com DB_NAME=financas_teste npm run db:init. O schema contem apenas tabelas.
  * A suíte verifica o banco do pool e da conexão avulsa antes de gravar dados.
  * A conexão avulsa prepara e limpa os dados, e a suíte encerra os dois recursos.
  */

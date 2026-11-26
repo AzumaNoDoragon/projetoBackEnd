@@ -4,11 +4,13 @@
   "description": "API REST para gerenciamento de finanças pessoais, desenvolvida como projeto avaliativo da disciplina **Desenvolvimento Web Avançado**.",
   "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test testes/regras.test.js testes/fontesDestinos.rotas.test.js testes/relatorioFontesDestinos.rotas.test.js",
     "start": "node server.js",
     "dev": "nodemon server.js",
     "db:init": "node database/init.js",
-    "db:seed": "node database/seed.js"
+    "db:seed": "node database/seed.js",
+    "test:integracao": "node testes/executar-integracao.cjs",
+    "db:seed:gerar": "node database/seed.js --gerar"
   },
   "repository": {
     "type": "git",

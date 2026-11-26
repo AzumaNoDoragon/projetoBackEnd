@@ -224,8 +224,8 @@ require(${JSON.stringify(path.join(raiz, 'server.js'))});`;
             const temporario = await requisicao('POST', '/lancamentos', tokenA, novoLancamento('saida', 5, '2026-12-01'), 201);
             await requisicao('PUT', '/lancamentos/' + temporario.id, tokenA, novoLancamento('saida', 7, '2026-12-02'));
             assert.equal((await requisicao('GET', '/lancamentos/' + temporario.id, tokenA)).valor, 7);
-            const removido = await requisicao('DELETE', '/lancamentos/' + temporario.id, tokenA);
-            assert.equal(removido.excluidos, 1);
+            const removido = await requisicao('DELETE', '/lancamentos/' + temporario.id, tokenA, undefined, 204);
+            assert.equal(removido, null);
             await requisicao('GET', '/lancamentos/' + temporario.id, tokenA, undefined, 404);
         });
         await registrar('Relatorio de faturas continua acessivel apos integrar categorias', async () => {
@@ -265,6 +265,9 @@ require(${JSON.stringify(path.join(raiz, 'server.js'))});`;
             assert.equal(typeof (await resposta.json()).erro, 'string');
             await requisicao('GET', '/rota-inexistente', null, undefined, 404);
         });
+        await require('./regressoes-api.cjs')({
+            registrar, requisicao, pool, ana, bruno, tokenA, tokenB, categoriaA, fonteA, fonteB, novoLancamento
+        });
     } finally {
         if (servidor && servidor.exitCode === null) {
             const saiu = once(servidor, 'exit');
@@ -283,7 +286,7 @@ require(${JSON.stringify(path.join(raiz, 'server.js'))});`;
             'Banco temporario exclusivo; servidor iniciado em porta livre; banco removido ao finalizar.', '',
             '| Caso | Resultado |', '| --- | --- |',
             ...resultados.map(r => '| ' + r.nome + ' | ' + (r.passou ? 'PASSOU' : 'FALHOU: ' + r.erro.replace(/\|/g, '/').replace(/\n/g, ' ')) + ' |'), '',
-            'Limites: nao valida o CRUD de fontes/destinos, seu relatorio ou todos os calculos de faturas. Estes pertencem aos outros integrantes.', ''
+            'Inclui regressoes de senha, categorias concorrentes, parcelamento, exclusao 204 e faturas. As suites do Levi complementam o CRUD/RF8.', ''
         ].join('\n');
         fs.writeFileSync(path.join(__dirname, 'RESULTADO_INTEGRACAO_A.md'), relatorio);
     }
